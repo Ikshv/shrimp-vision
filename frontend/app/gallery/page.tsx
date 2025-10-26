@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Upload, Trash2, Eye, Download, ArrowLeft } from 'lucide-react'
+import { Upload, Trash2, Eye, Download, ArrowLeft, Grid3X3 } from 'lucide-react'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 import axios from 'axios'

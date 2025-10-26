@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { useDropzone } from 'react-dropzone'
-import { Upload, X, Image as ImageIcon, CheckCircle, AlertCircle, Images } from 'lucide-react'
+import { Upload, X, Image as ImageIcon, CheckCircle, AlertCircle, Grid3X3 } from 'lucide-react'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 import axios from 'axios'
@@ -113,7 +113,7 @@ export default function UploadPage() {
             </div>
             <div className="flex items-center space-x-4">
               <Link href="/gallery" className="btn-secondary flex items-center gap-2">
-                <Images className="w-4 h-4" />
+                <Grid3X3 className="w-4 h-4" />
                 View Gallery
               </Link>
               <Link href="/annotate" className="btn-primary">

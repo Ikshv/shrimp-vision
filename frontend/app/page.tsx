@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Upload, Target, Brain, Download, Camera, Zap, Images } from 'lucide-react'
+import { Upload, Target, Brain, Download, Camera, Zap, Grid3X3 } from 'lucide-react'
 import Link from 'next/link'
 
 export default function Home() {
@@ -15,7 +15,7 @@ export default function Home() {
       href: "/upload"
     },
     {
-      icon: <Images className="w-8 h-8 text-blue-600" />,
+      icon: <Grid3X3 className="w-8 h-8 text-blue-600" />,
       title: "Image Gallery",
       description: "View, manage, and delete your uploaded images",
       href: "/gallery"
