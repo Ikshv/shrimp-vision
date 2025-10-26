@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException, Form
 from pydantic import BaseModel
 from typing import List, Optional
 import os
@@ -7,6 +7,15 @@ import json
 from PIL import Image
 import aiofiles
 from services.inference_engine import InferenceEngine
+
+# Create a global inference engine instance to maintain state between requests
+inference_engine = None
+
+def get_inference_engine():
+    global inference_engine
+    if inference_engine is None:
+        inference_engine = InferenceEngine()
+    return inference_engine
 
 router = APIRouter()
 
@@ -24,12 +33,13 @@ class InferenceResponse(BaseModel):
     detections: List[DetectionResult]
     annotated_image_path: Optional[str]
     processing_time: float
+    model_used: Optional[str] = None
 
 @router.post("/predict", response_model=InferenceResponse)
 async def predict_shrimp(
     image: UploadFile = File(...),
-    model_name: Optional[str] = None,
-    confidence_threshold: float = 0.5
+    model_name: Optional[str] = Form(None),
+    confidence_threshold: str = Form("0.5")
 ):
     """
     Run inference on an uploaded image to detect and count shrimp
@@ -50,12 +60,12 @@ async def predict_shrimp(
             await f.write(content)
         
         try:
-            # Initialize inference engine
-            inference_engine = InferenceEngine()
+            # Get the inference engine instance
+            engine = get_inference_engine()
             
             # Get the latest model if no specific model is provided
             if not model_name:
-                model_name = inference_engine.get_latest_model()
+                model_name = engine.get_latest_model()
                 if not model_name:
                     raise HTTPException(status_code=404, detail="No trained model found")
             
@@ -63,10 +73,16 @@ async def predict_shrimp(
             import time
             start_time = time.time()
             
-            result = await inference_engine.predict(
+            # Convert confidence threshold to float
+            try:
+                confidence_threshold_float = float(confidence_threshold)
+            except (ValueError, TypeError):
+                confidence_threshold_float = 0.5
+            
+            result = await engine.predict(
                 image_path=temp_path,
                 model_name=model_name,
-                confidence_threshold=confidence_threshold
+                confidence_threshold=confidence_threshold_float
             )
             
             processing_time = time.time() - start_time
@@ -93,7 +109,8 @@ async def predict_shrimp(
                 total_shrimp=result.get('total_shrimp', 0),
                 detections=detections,
                 annotated_image_path=annotated_image_path,
-                processing_time=processing_time
+                processing_time=processing_time,
+                model_used=result.get('model_used', 'unknown')
             )
             
         finally:

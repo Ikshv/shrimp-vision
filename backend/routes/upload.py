@@ -90,6 +90,9 @@ async def list_uploaded_images():
         images = []
         if os.path.exists(UPLOAD_DIR):
             for filename in os.listdir(UPLOAD_DIR):
+                # Skip annotated images and temporary files
+                if filename.startswith('temp_') or filename.endswith('_annotated.jpg') or filename.endswith('_annotated.webp'):
+                    continue
                 if any(filename.lower().endswith(ext) for ext in ALLOWED_EXTENSIONS):
                     file_path = os.path.join(UPLOAD_DIR, filename)
                     file_id = filename.split('.')[0]

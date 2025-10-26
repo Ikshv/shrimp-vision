@@ -28,7 +28,7 @@ class InferenceEngine:
         """
         try:
             # Load model if not already loaded or if different model requested
-            if not self.current_model or (model_name and model_name != self.current_model_path):
+            if not self.current_model or (model_name and model_name != os.path.basename(self.current_model_path)):
                 model_path = self._get_model_path(model_name)
                 if not model_path:
                     raise ValueError("No trained model found")
