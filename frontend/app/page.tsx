@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Upload, Target, Brain, Download, Camera, Zap } from 'lucide-react'
+import { Upload, Target, Brain, Download, Camera, Zap, Images } from 'lucide-react'
 import Link from 'next/link'
 
 export default function Home() {
@@ -13,6 +13,12 @@ export default function Home() {
       title: "Upload Images",
       description: "Drag and drop multiple aquarium images for processing",
       href: "/upload"
+    },
+    {
+      icon: <Images className="w-8 h-8 text-blue-600" />,
+      title: "Image Gallery",
+      description: "View, manage, and delete your uploaded images",
+      href: "/gallery"
     },
     {
       icon: <Target className="w-8 h-8 text-shrimp-600" />,
@@ -81,7 +87,7 @@ export default function Home() {
             </p>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8">
             {features.map((feature, index) => (
               <Link
                 key={index}
@@ -159,6 +165,9 @@ export default function Home() {
             <div className="flex justify-center space-x-6">
               <Link href="/upload" className="text-gray-400 hover:text-white transition-colors">
                 Upload
+              </Link>
+              <Link href="/gallery" className="text-gray-400 hover:text-white transition-colors">
+                Gallery
               </Link>
               <Link href="/annotate" className="text-gray-400 hover:text-white transition-colors">
                 Annotate

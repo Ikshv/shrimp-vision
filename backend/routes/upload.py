@@ -19,6 +19,7 @@ UPLOAD_DIR = "static/uploads"
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".heic", ".heif", ".webp", ".gif"}
 
 @router.post("/")
+@router.post("")
 async def upload_images(files: List[UploadFile] = File(...)):
     """
     Upload multiple images for annotation and training

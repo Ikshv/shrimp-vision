@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { useDropzone } from 'react-dropzone'
-import { Upload, X, Image as ImageIcon, CheckCircle, AlertCircle } from 'lucide-react'
+import { Upload, X, Image as ImageIcon, CheckCircle, AlertCircle, Images } from 'lucide-react'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 import axios from 'axios'
@@ -111,9 +111,15 @@ export default function UploadPage() {
               <h1 className="text-3xl font-bold text-gray-900">Upload Images</h1>
               <p className="text-gray-600 mt-1">Upload aquarium images for shrimp detection training</p>
             </div>
-            <Link href="/annotate" className="btn-primary">
-              Next: Annotate
-            </Link>
+            <div className="flex items-center space-x-4">
+              <Link href="/gallery" className="btn-secondary flex items-center gap-2">
+                <Images className="w-4 h-4" />
+                View Gallery
+              </Link>
+              <Link href="/annotate" className="btn-primary">
+                Next: Annotate
+              </Link>
+            </div>
           </div>
         </div>
       </div>
