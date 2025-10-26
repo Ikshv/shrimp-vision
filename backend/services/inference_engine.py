@@ -111,11 +111,18 @@ class InferenceEngine:
             if os.path.exists(model_path):
                 return model_path
         
-        # Find the latest trained model
+        # Find the best trained model (prefer YOLOv8m for better performance)
         if os.path.exists(self.models_dir):
             model_files = [f for f in os.listdir(self.models_dir) if f.endswith('.pt')]
             if model_files:
-                # Sort by modification time (newest first)
+                # Prefer YOLOv8m model for better performance
+                preferred_models = ['shrimp_detection_yolov8m_best.pt', 'shrimp_detection_yolov8s_best.pt', 'shrimp_detection_yolov8l_best.pt', 'shrimp_detection_yolov8n_best.pt']
+                
+                for preferred in preferred_models:
+                    if preferred in model_files:
+                        return os.path.join(self.models_dir, preferred)
+                
+                # Fallback to newest model if no preferred model found
                 model_files.sort(key=lambda x: os.path.getmtime(os.path.join(self.models_dir, x)), reverse=True)
                 return os.path.join(self.models_dir, model_files[0])
         
