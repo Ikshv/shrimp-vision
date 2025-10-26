@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Upload Debug Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .upload-area { 
+            border: 2px dashed #ccc; 
+            padding: 20px; 
+            text-align: center; 
+            margin: 20px 0;
+        }
+        .error { color: red; }
+        .success { color: green; }
+        .info { color: blue; }
+    </style>
+</head>
+<body>
+    <h1>📱 iPhone Photo Upload Debug</h1>
+    
+    <div class="upload-area">
+        <input type="file" id="fileInput" accept="image/*" multiple>
+        <p>Select iPhone photos to test upload</p>
+    </div>
+    
+    <div id="results"></div>
+    
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const results = document.getElementById('results');
+        
+        fileInput.addEventListener('change', async (e) => {
+            const files = Array.from(e.target.files);
+            results.innerHTML = '<h3>File Analysis:</h3>';
+            
+            files.forEach((file, index) => {
+                const div = document.createElement('div');
+                div.innerHTML = `
+                    <h4>File ${index + 1}: ${file.name}</h4>
+                    <p><strong>Type:</strong> ${file.type}</p>
+                    <p><strong>Size:</strong> ${(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                    <p><strong>Last Modified:</strong> ${new Date(file.lastModified)}</p>
+                `;
+                results.appendChild(div);
+                
+                // Test upload
+                testUpload(file, index);
+            });
+        });
+        
+        async function testUpload(file, index) {
+            const formData = new FormData();
+            formData.append('files', file);
+            
+            try {
+                const response = await fetch('/api/upload/', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                const div = document.createElement('div');
+                if (response.ok) {
+                    div.innerHTML = `<p class="success">✅ File ${index + 1} uploaded successfully!</p>`;
+                } else {
+                    div.innerHTML = `<p class="error">❌ File ${index + 1} failed: ${result.detail || 'Unknown error'}</p>`;
+                }
+                results.appendChild(div);
+                
+            } catch (error) {
+                const div = document.createElement('div');
+                div.innerHTML = `<p class="error">❌ File ${index + 1} error: ${error.message}</p>`;
+                results.appendChild(div);
+            }
+        }
+    </script>
+</body>
+</html>

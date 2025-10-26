@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>HEIC Upload Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .upload-area { 
+            border: 2px dashed #ccc; 
+            padding: 20px; 
+            text-align: center; 
+            margin: 20px 0;
+            background: #f9f9f9;
+        }
+        .error { color: red; }
+        .success { color: green; }
+        .info { color: blue; }
+        .file-info { background: #e8f4fd; padding: 10px; margin: 10px 0; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1>📱 HEIC Upload Test</h1>
+    <p>This page tests iPhone HEIC photo uploads specifically.</p>
+    
+    <div class="upload-area">
+        <input type="file" id="fileInput" accept="image/heic,image/heif,image/jpeg,image/png" multiple>
+        <p><strong>Select iPhone photos (HEIC format) to test</strong></p>
+        <p class="info">✅ HEIC, HEIF, JPEG, PNG supported</p>
+    </div>
+    
+    <div id="results"></div>
+    
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const results = document.getElementById('results');
+        
+        fileInput.addEventListener('change', async (e) => {
+            const files = Array.from(e.target.files);
+            results.innerHTML = '<h3>📱 iPhone Photo Analysis:</h3>';
+            
+            if (files.length === 0) {
+                results.innerHTML += '<p class="error">No files selected</p>';
+                return;
+            }
+            
+            files.forEach((file, index) => {
+                const div = document.createElement('div');
+                div.className = 'file-info';
+                div.innerHTML = `
+                    <h4>📸 File ${index + 1}: ${file.name}</h4>
+                    <p><strong>MIME Type:</strong> ${file.type || 'Unknown'}</p>
+                    <p><strong>Size:</strong> ${(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                    <p><strong>Extension:</strong> ${file.name.split('.').pop().toLowerCase()}</p>
+                    <p><strong>Last Modified:</strong> ${new Date(file.lastModified).toLocaleString()}</p>
+                `;
+                results.appendChild(div);
+                
+                // Test upload
+                testUpload(file, index);
+            });
+        });
+        
+        async function testUpload(file, index) {
+            const formData = new FormData();
+            formData.append('files', file);
+            
+            const statusDiv = document.createElement('div');
+            statusDiv.innerHTML = `<p class="info">🔄 Uploading file ${index + 1}...</p>`;
+            results.appendChild(statusDiv);
+            
+            try {
+                const response = await fetch('/api/upload/', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    statusDiv.innerHTML = `<p class="success">✅ File ${index + 1} uploaded successfully!</p>`;
+                    if (result.uploaded_files && result.uploaded_files.length > 0) {
+                        const fileInfo = result.uploaded_files[0];
+                        statusDiv.innerHTML += `<p class="info">📊 Image: ${fileInfo.width}x${fileInfo.height} pixels</p>`;
+                    }
+                } else {
+                    statusDiv.innerHTML = `<p class="error">❌ File ${index + 1} failed: ${result.detail || 'Unknown error'}</p>`;
+                }
+                
+            } catch (error) {
+                statusDiv.innerHTML = `<p class="error">❌ File ${index + 1} error: ${error.message}</p>`;
+            }
+        }
+    </script>
+</body>
+</html>
