@@ -107,7 +107,7 @@ Shrimp Vision/
 4. **Create environment file**
    ```bash
    # In frontend directory
-   echo "NEXT_PUBLIC_API_URL=http://localhost:8000" > .env.local
+   echo "NEXT_PUBLIC_API_URL=http://localhost:8100" > .env.local
    ```
 
 ### Running the Application
@@ -118,17 +118,17 @@ Shrimp Vision/
    source venv/bin/activate  # On Windows: venv\Scripts\activate
    python main.py
    ```
-   The API will be available at `http://localhost:8000`
+   The API will be available at `http://localhost:8100`
 
 2. **Start the frontend development server**
    ```bash
    cd frontend
    npm run dev
    ```
-   The web application will be available at `http://localhost:3000`
+   The web application will be available at `http://localhost:3100`
 
 3. **Open your browser**
-   Navigate to `http://localhost:3000` to start using Shrimp Vision!
+   Navigate to `http://localhost:3100` to start using Shrimp Vision!
 
 ## 📖 Usage Guide
 
@@ -187,7 +187,7 @@ DEFAULT_VAL_SPLIT = 0.2
 Frontend configuration is handled through environment variables in `.env.local`:
 
 ```bash
-NEXT_PUBLIC_API_URL=http://localhost:8000  # Backend API URL
+NEXT_PUBLIC_API_URL=http://localhost:8100  # Backend API URL
 ```
 
 ## 📊 API Documentation
@@ -278,12 +278,12 @@ npm test  # Run frontend tests
 **Backend won't start**
 - Ensure Python 3.11+ is installed
 - Check that all dependencies are installed: `pip install -r requirements.txt`
-- Verify port 8000 is not in use
+- Verify port 8100 is not in use
 
 **Frontend won't start**
 - Ensure Node.js 18+ is installed
 - Install dependencies: `npm install`
-- Check that port 3000 is not in use
+- Check that port 3100 is not in use
 
 **Training fails**
 - Ensure you have at least 5 annotated images
@@ -298,7 +298,7 @@ npm test  # Run frontend tests
 ### Getting Help
 
 1. Check the [Issues](https://github.com/your-repo/issues) page
-2. Review the API documentation at `http://localhost:8000/docs`
+2. Review the API documentation at `http://localhost:8100/docs`
 3. Check browser console for frontend errors
 4. Check backend logs for server errors
 

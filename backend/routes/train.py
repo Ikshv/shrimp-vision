@@ -120,13 +120,17 @@ async def run_training(config: TrainingConfig):
     global training_status
     
     try:
-        # Step 1: Prepare dataset
+        # Step 0: Initial verification
         training_status.status = "preparing"
-        training_status.message = "Preparing dataset..."
-        training_status.progress = 10.0
+        training_status.message = "Verifying training configuration..."
+        training_status.progress = 5.0
+        await send_training_update("preparing", 5.0, "Verifying training configuration...")
+        await asyncio.sleep(0.5)  # Brief pause for UI update
         
-        # Send WebSocket update
-        await send_training_update("preparing", 10.0, "Preparing dataset...")
+        # Step 1: Prepare dataset
+        training_status.message = "Preparing dataset and splitting images..."
+        training_status.progress = 10.0
+        await send_training_update("preparing", 10.0, "Preparing dataset and splitting images...")
         
         dataset_manager = DatasetManager()
         dataset_path = await dataset_manager.prepare_dataset(
@@ -137,40 +141,32 @@ async def run_training(config: TrainingConfig):
         if not dataset_path:
             raise Exception("Failed to prepare dataset")
         
+        # Get dataset stats for verification message
+        dataset_stats = dataset_manager.get_dataset_stats()
+        
         training_status.progress = 20.0
-        training_status.message = "Dataset prepared, starting training..."
+        training_status.message = f"Dataset prepared: {dataset_stats['train_images']} train, {dataset_stats['val_images']} val images"
         
         # Send WebSocket update
-        await send_training_update("preparing", 20.0, "Dataset prepared, starting training...")
+        await send_training_update("preparing", 20.0, f"✓ Dataset ready: {dataset_stats['train_images']} train, {dataset_stats['val_images']} val images")
+        await asyncio.sleep(0.5)  # Brief pause for UI update
         
         # Step 2: Initialize trainer
+        training_status.message = f"Initializing {config.model_type} model (downloading if needed)..."
+        training_status.progress = 25.0
+        await send_training_update("preparing", 25.0, f"Initializing {config.model_type} model (downloading if needed)...")
+        
         trainer = SimpleTrainer()
         
-        # Step 3: Start training
+        # Step 3: Start training - verification complete
         training_status.status = "training"
-        training_status.message = "Training model..."
+        training_status.message = f"Starting training: {config.model_type}, {config.epochs} epochs, batch size {config.batch_size}"
+        training_status.progress = 25.0
+        training_status.current_epoch = 0
+        training_status.total_epochs = config.epochs
         
         # Send WebSocket update
-        await send_training_update("training", 20.0, "Training model...", 0, config.epochs)
-        
-        # Update status to show training is in progress
-        training_status.status = "training"
-        training_status.message = f"Training {config.model_type} model for {config.epochs} epochs..."
-        training_status.progress = 25.0
-        
-        # Start a background task to update progress periodically
-        async def update_progress():
-            import asyncio
-            progress = 25.0
-            while training_status.status == "training" and progress < 95.0:
-                await asyncio.sleep(5)  # Update every 5 seconds
-                if training_status.status == "training":
-                    progress += 5.0
-                    training_status.progress = min(progress, 95.0)
-                    training_status.message = f"Training {config.model_type} model... ({progress:.0f}% complete)"
-        
-        # Start progress updater
-        progress_task = asyncio.create_task(update_progress())
+        await send_training_update("training", 25.0, f"✓ Training started: {config.model_type} for {config.epochs} epochs", 0, config.epochs)
         
         # Train the model with progress callback
         model_path = await trainer.train(
@@ -180,20 +176,25 @@ async def run_training(config: TrainingConfig):
             batch_size=config.batch_size,
             image_size=config.image_size,
             learning_rate=config.learning_rate,
-            progress_callback=None  # Disable for now to prevent issues
+            progress_callback=async_progress_callback  # Enable progress callback
         )
         
-        # Cancel progress updater
-        progress_task.cancel()
+        # Step 4: Training completed - verify model exists
+        if not model_path or not os.path.exists(model_path):
+            raise Exception(f"Training completed but model file not found at: {model_path}")
         
-        # Step 4: Training completed
+        # Verify model file size is reasonable (at least 1MB)
+        model_size = os.path.getsize(model_path) / (1024 * 1024)  # Size in MB
+        if model_size < 1:
+            raise Exception(f"Model file seems too small ({model_size:.2f} MB). Training may have failed.")
+        
         training_status.status = "completed"
         training_status.progress = 100.0
-        training_status.message = "Training completed successfully!"
+        training_status.message = f"Training completed successfully! Model saved ({model_size:.2f} MB)"
         training_status.model_path = model_path
         
         # Send final WebSocket update
-        await send_training_update("completed", 100.0, "Training completed successfully!")
+        await send_training_update("completed", 100.0, f"Training completed successfully! Model: {os.path.basename(model_path)}")
         
     except Exception as e:
         training_status.status = "failed"
@@ -205,22 +206,57 @@ async def run_training(config: TrainingConfig):
 
 async def async_progress_callback(epoch: int, total_epochs: int, loss: float, metrics: dict):
     """
-    Progress callback for training updates
+    Progress callback for training updates - called for each epoch or initialization step
     """
-    progress = 20.0 + (epoch / total_epochs) * 70.0
-    accuracy = metrics.get('mAP50', 0.0) if metrics else None
-    
-    # Update global status
+    # Update global status (this is what polling will read)
     global training_status
-    training_status.current_epoch = epoch
-    training_status.total_epochs = total_epochs
-    training_status.loss = loss
-    training_status.accuracy = accuracy
-    training_status.progress = progress
-    training_status.message = f"Training epoch {epoch}/{total_epochs}"
     
-    # Send WebSocket update
-    await send_training_update("training", progress, f"Training epoch {epoch}/{total_epochs}", epoch, total_epochs, loss, accuracy)
+    if epoch == 0:
+        # This is an initialization update (model download, etc.)
+        init_message = metrics.get('init_message', None) if metrics else None
+        if init_message:
+            training_status.message = init_message
+            # Extract progress from message if it's a download percentage
+            if 'downloading' in init_message.lower():
+                # Try to extract percentage
+                import re
+                pct_match = re.search(r'(\d+)%', init_message)
+                if pct_match:
+                    download_pct = int(pct_match.group(1))
+                    training_status.progress = 25.0 + (download_pct * 0.05)  # 25-30%
+                else:
+                    training_status.progress = min(training_status.progress + 1.0, 30.0)
+            else:
+                training_status.progress = min(training_status.progress + 1.0, 30.0)
+        else:
+            training_status.message = training_status.message or "Loading model..."
+            training_status.progress = min(training_status.progress + 1.0, 30.0)  # Cap at 30% during init
+    else:
+        # Actual training epoch
+        # Calculate progress (25% for prep, 75% for training)
+        progress = 25.0 + (epoch / total_epochs) * 70.0
+        accuracy = metrics.get('mAP50', 0.0) if metrics else None
+        
+        training_status.current_epoch = epoch
+        training_status.total_epochs = total_epochs
+        training_status.loss = loss if loss > 0 else training_status.loss  # Keep previous loss if invalid
+        training_status.accuracy = accuracy
+        training_status.progress = min(progress, 95.0)  # Cap at 95% until complete
+        training_status.message = f"Epoch {epoch}/{total_epochs} - Loss: {loss:.4f}" if loss > 0 else f"Epoch {epoch}/{total_epochs}"
+        
+        # Print to console for debugging
+        print(f"Training progress: Epoch {epoch}/{total_epochs}, Loss: {loss:.4f}, Progress: {training_status.progress:.1f}%")
+    
+    # Send WebSocket update immediately
+    await send_training_update(
+        training_status.status if epoch > 0 else "preparing", 
+        training_status.progress, 
+        training_status.message,
+        epoch, 
+        total_epochs, 
+        training_status.loss if epoch > 0 else None, 
+        metrics.get('mAP50', None) if metrics and epoch > 0 else None
+    )
 
 @router.get("/models/list")
 async def list_trained_models():

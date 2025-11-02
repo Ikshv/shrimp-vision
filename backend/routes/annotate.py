@@ -1,9 +1,10 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import json
 import os
 from pathlib import Path
+from config.classes import AVAILABLE_CLASSES, is_valid_class, get_class_by_name
 
 router = APIRouter()
 
@@ -12,8 +13,11 @@ class BoundingBox(BaseModel):
     y: float  # y coordinate (0-1 normalized)
     width: float  # width (0-1 normalized)
     height: float  # height (0-1 normalized)
-    label: str = "shrimp"
+    label: str = "shrimp"  # Class name (type)
     confidence: float = 1.0
+    class_id: Optional[int] = None  # Class ID for YOLO format
+    color: Optional[str] = None  # Color attribute (e.g., "red", "blue")
+    attributes: Optional[List[str]] = []  # Additional attributes (e.g., ["berried", "healthy"])
 
 class Annotation(BaseModel):
     image_id: str
@@ -22,9 +26,26 @@ class Annotation(BaseModel):
     image_height: int
     bounding_boxes: List[BoundingBox]
     total_shrimp: int
+    class_counts: Optional[Dict[str, int]] = None  # Count of each class
 
 class AnnotationList(BaseModel):
     annotations: List[Annotation]
+
+@router.get("/classes")
+async def get_available_classes():
+    """
+    Get list of available classes and attributes for multi-tagging
+    """
+    from config.classes import COLOR_ATTRIBUTES, ADDITIONAL_ATTRIBUTES, SHRIMP_TYPES
+    
+    return {
+        "success": True,
+        "types": SHRIMP_TYPES,
+        "colors": COLOR_ATTRIBUTES,
+        "attributes": ADDITIONAL_ATTRIBUTES,
+        "classes": AVAILABLE_CLASSES,  # For backward compatibility
+        "class_names": list(AVAILABLE_CLASSES.keys())
+    }
 
 @router.post("/save")
 async def save_annotation(annotation: Annotation):
@@ -36,6 +57,23 @@ async def save_annotation(annotation: Annotation):
         image_path = f"static/uploads/{annotation.image_filename}"
         if not os.path.exists(image_path):
             raise HTTPException(status_code=404, detail="Image not found")
+        
+        # Validate all bounding box classes
+        class_counts = {}
+        for bbox in annotation.bounding_boxes:
+            if not is_valid_class(bbox.label):
+                raise HTTPException(status_code=400, detail=f"Invalid class: {bbox.label}")
+            
+            # Set class_id if not provided
+            if bbox.class_id is None:
+                class_info = get_class_by_name(bbox.label)
+                bbox.class_id = class_info["id"] if class_info else 0
+            
+            # Count classes
+            class_counts[bbox.label] = class_counts.get(bbox.label, 0) + 1
+        
+        # Update annotation with class counts
+        annotation.class_counts = class_counts
         
         # Create annotations directory if it doesn't exist
         os.makedirs("static/annotations", exist_ok=True)
@@ -49,7 +87,8 @@ async def save_annotation(annotation: Annotation):
             "success": True,
             "message": f"Annotation saved for {annotation.image_filename}",
             "total_shrimp": annotation.total_shrimp,
-            "bounding_boxes": len(annotation.bounding_boxes)
+            "bounding_boxes": len(annotation.bounding_boxes),
+            "class_counts": class_counts
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save annotation: {str(e)}")

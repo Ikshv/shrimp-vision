@@ -44,9 +44,16 @@ class InferenceEngine:
             # Run inference
             results = self.current_model(image, conf=confidence_threshold)
             
+            # Get class names from the model (YOLO stores them in the model)
+            # The model's class names should match what was in dataset.yaml
+            model_class_names = self.current_model.names if hasattr(self.current_model, 'names') else None
+            
             # Process results
             detections = []
             total_shrimp = 0
+            
+            # Track all detected classes for debugging
+            detected_classes = {}
             
             for result in results:
                 boxes = result.boxes
@@ -64,18 +71,40 @@ class InferenceEngine:
                         width_norm = (x2 - x1) / img_width
                         height_norm = (y2 - y1) / img_height
                         
+                        # Get class name - prefer model's own class names, fallback to our mapping
+                        if model_class_names and class_id in model_class_names:
+                            # Use the model's class name directly (most reliable)
+                            label = model_class_names[class_id]
+                            print(f"[INFERENCE] Model predicts class_id {class_id} = '{label}' (confidence: {confidence:.3f})")
+                        else:
+                            # Fallback to our class mapping
+                            from config.classes import get_class_by_id
+                            class_info = get_class_by_id(class_id)
+                            label = class_info["name"] if class_info else f"unknown_class_{class_id}"
+                            print(f"[INFERENCE] Using fallback mapping: class_id {class_id} = '{label}' (confidence: {confidence:.3f})")
+                        
+                        # Track detected classes for debugging
+                        if label not in detected_classes:
+                            detected_classes[label] = 0
+                        detected_classes[label] += 1
+                        
                         detection = {
                             "x": x_norm,
                             "y": y_norm,
                             "width": width_norm,
                             "height": height_norm,
                             "confidence": confidence,
-                            "label": "shrimp",
+                            "label": label,
                             "class_id": class_id
                         }
                         
                         detections.append(detection)
                         total_shrimp += 1
+            
+            # Log detected classes for debugging
+            if detected_classes:
+                print(f"[INFERENCE] Detected classes: {detected_classes}")
+                print(f"[INFERENCE] Model class names: {model_class_names}")
             
             # Create annotated image if requested
             annotated_image_path = None
@@ -141,6 +170,9 @@ class InferenceEngine:
             # Create a copy of the image for annotation
             annotated_image = image.copy()
             
+            # Get class colors for visualization
+            from config.classes import get_class_by_name, AVAILABLE_CLASSES
+            
             # Draw bounding boxes
             for detection in detections:
                 x = int(detection["x"] * image.shape[1])
@@ -148,26 +180,39 @@ class InferenceEngine:
                 width = int(detection["width"] * image.shape[1])
                 height = int(detection["height"] * image.shape[0])
                 
-                # Draw rectangle
-                cv2.rectangle(annotated_image, (x, y), (x + width, y + height), (0, 255, 0), 2)
+                # Get color for this class
+                label = detection.get('label', 'shrimp')
+                class_info = get_class_by_name(label) or AVAILABLE_CLASSES.get('shrimp', {})
+                color_hex = class_info.get('color', '#10B981')
+                # Convert hex color (#RRGGBB) to BGR for OpenCV
+                # Remove '#' if present and convert to RGB integers
+                hex_clean = color_hex.lstrip('#')
+                r = int(hex_clean[0:2], 16)
+                g = int(hex_clean[2:4], 16)
+                b = int(hex_clean[4:6], 16)
+                color_bgr = (b, g, r)  # OpenCV uses BGR format
                 
-                # Draw label with confidence
-                label = f"{detection['label']}: {detection['confidence']:.2f}"
-                label_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)[0]
+                # Draw rectangle with class-specific color
+                cv2.rectangle(annotated_image, (x, y), (x + width, y + height), color_bgr, 2)
                 
-                # Draw label background
+                # Draw label with confidence (use original label, not overwritten one)
+                original_label = detection.get('label', 'shrimp')
+                label_text = f"{original_label}: {detection['confidence']:.2f}"
+                label_size = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)[0]
+                
+                # Draw label background with class-specific color
                 cv2.rectangle(
                     annotated_image,
                     (x, y - label_size[1] - 10),
                     (x + label_size[0], y),
-                    (0, 255, 0),
+                    color_bgr,
                     -1
                 )
                 
                 # Draw label text
                 cv2.putText(
                     annotated_image,
-                    label,
+                    label_text,
                     (x, y - 5),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     0.5,

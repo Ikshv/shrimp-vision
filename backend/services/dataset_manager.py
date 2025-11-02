@@ -147,7 +147,7 @@ class DatasetManager:
     
     def _convert_to_yolo_format(self, annotation_data: Dict[str, Any]) -> List[str]:
         """
-        Convert annotation data to YOLO format
+        Convert annotation data to YOLO format with multi-class support
         """
         yolo_annotations = []
         
@@ -162,8 +162,8 @@ class DatasetManager:
             height = bbox['height']
             
             # YOLO format: class_id x_center y_center width height (all normalized)
-            # Class 0 for shrimp (can be extended for multiple classes)
-            class_id = 0
+            # Use class_id from bbox, fallback to 0 for backward compatibility
+            class_id = bbox.get('class_id', 0)
             yolo_line = f"{class_id} {x_center:.6f} {y_center:.6f} {width:.6f} {height:.6f}"
             yolo_annotations.append(yolo_line)
         
@@ -171,8 +171,13 @@ class DatasetManager:
     
     def _create_dataset_yaml(self) -> str:
         """
-        Create dataset.yaml file for YOLO training
+        Create dataset.yaml file for YOLO training with multi-class support
         """
+        from config.classes import get_class_names, get_num_classes
+        
+        class_names = get_class_names()
+        num_classes = get_num_classes()
+        
         dataset_yaml_content = f"""
 # Shrimp Detection Dataset Configuration
 path: {os.path.abspath(self.dataset_dir)}
@@ -180,8 +185,8 @@ train: images/train
 val: images/val
 
 # Classes
-nc: 1  # number of classes
-names: ['shrimp']  # class names
+nc: {num_classes}  # number of classes
+names: {class_names}  # class names
 """
         
         dataset_yaml_path = os.path.join(self.dataset_dir, "dataset.yaml")

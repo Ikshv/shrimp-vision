@@ -23,6 +23,9 @@ interface BoundingBox {
   height: number
   label: string
   confidence: number
+  class_id?: number
+  color?: string  // Color attribute
+  attributes?: string[]  // Additional attributes
 }
 
 interface Annotation {
@@ -32,6 +35,22 @@ interface Annotation {
   image_height: number
   bounding_boxes: BoundingBox[]
   total_shrimp: number
+  class_counts?: Record<string, number>
+}
+
+interface ClassInfo {
+  id: number
+  name: string
+  display_name: string
+  color: string
+  description: string
+}
+
+interface AttributeInfo {
+  name: string
+  display_name: string
+  color?: string
+  description: string
 }
 
 export default function AnnotatePage() {
@@ -42,6 +61,12 @@ export default function AnnotatePage() {
   const [currentBox, setCurrentBox] = useState<Partial<BoundingBox> | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [availableClasses, setAvailableClasses] = useState<Record<string, ClassInfo>>({})
+  const [selectedClass, setSelectedClass] = useState<string>('shrimp')
+  const [colorAttributes, setColorAttributes] = useState<Record<string, AttributeInfo>>({})
+  const [additionalAttributes, setAdditionalAttributes] = useState<Record<string, AttributeInfo>>({})
+  const [selectedColor, setSelectedColor] = useState<string | null>(null)
+  const [selectedAttributes, setSelectedAttributes] = useState<string[]>([])
   
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const imageRef = useRef<HTMLImageElement>(null)
@@ -49,6 +74,7 @@ export default function AnnotatePage() {
 
   useEffect(() => {
     fetchImages()
+    fetchAvailableClasses()
   }, [])
 
   useEffect(() => {
@@ -56,6 +82,23 @@ export default function AnnotatePage() {
       loadCurrentImageAnnotation()
     }
   }, [currentImageIndex, images])
+
+  useEffect(() => {
+    // Handle window resize to keep canvas properly sized
+    const handleResize = () => {
+      if (canvasRef.current && imageRef.current) {
+        const canvas = canvasRef.current
+        const img = imageRef.current
+        const rect = img.getBoundingClientRect()
+        canvas.width = rect.width
+        canvas.height = rect.height
+        drawCanvas()
+      }
+    }
+
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [boundingBoxes, currentBox, availableClasses])
 
   const fetchImages = async () => {
     try {
@@ -68,6 +111,29 @@ export default function AnnotatePage() {
       console.error('Error fetching images:', error)
       toast.error('Failed to load images')
       setIsLoading(false)
+    }
+  }
+
+  const fetchAvailableClasses = async () => {
+    try {
+      const response = await axios.get('/api/annotate/classes')
+      if (response.data.success) {
+        setAvailableClasses(response.data.types || response.data.classes)
+        setColorAttributes(response.data.colors || {})
+        setAdditionalAttributes(response.data.attributes || {})
+      }
+    } catch (error) {
+      console.error('Error fetching classes:', error)
+      // Fallback to default shrimp class
+      setAvailableClasses({
+        'shrimp': {
+          id: 0,
+          name: 'shrimp',
+          display_name: 'Shrimp',
+          color: '#10B981',
+          description: 'Regular shrimp'
+        }
+      })
     }
   }
 
@@ -148,7 +214,15 @@ export default function AnnotatePage() {
     
     // Only add box if it has minimum size
     if (currentBox.width! > 0.01 && currentBox.height! > 0.01) {
-      setBoundingBoxes(prev => [...prev, currentBox as BoundingBox])
+      const classInfo = availableClasses[selectedClass]
+      const newBox: BoundingBox = {
+        ...currentBox,
+        label: selectedClass,
+        class_id: classInfo?.id,
+        color: selectedColor || undefined,
+        attributes: selectedAttributes.length > 0 ? [...selectedAttributes] : []
+      } as BoundingBox
+      setBoundingBoxes(prev => [...prev, newBox])
     }
     
     setIsDrawing(false)
@@ -167,9 +241,7 @@ export default function AnnotatePage() {
     ctx.clearRect(0, 0, canvas.width, canvas.height)
     
     // Draw existing bounding boxes
-    ctx.strokeStyle = '#10B981'
     ctx.lineWidth = 2
-    ctx.fillStyle = 'rgba(16, 185, 129, 0.1)'
     
     const allBoxes = currentBox ? [...boundingBoxes, currentBox] : boundingBoxes
     allBoxes.forEach((box, index) => {
@@ -178,21 +250,37 @@ export default function AnnotatePage() {
       const width = box.width! * canvas.width
       const height = box.height! * canvas.height
       
-      // Draw rectangle
+      // Get class color
+      const classInfo = availableClasses[box.label || 'shrimp']
+      const color = classInfo?.color || '#10B981'
+      
+      // Draw rectangle with class-specific color
+      ctx.strokeStyle = color
+      ctx.fillStyle = color + '1A' // Add transparency
       ctx.fillRect(x, y, width, height)
       ctx.strokeRect(x, y, width, height)
       
-      // Draw label
-      ctx.fillStyle = '#10B981'
+      // Draw label with class-specific color
+      ctx.fillStyle = color
       ctx.font = '14px Arial'
-      ctx.fillText(`${box.label} ${index + 1}`, x, y - 5)
-      ctx.fillStyle = 'rgba(16, 185, 129, 0.1)'
+      const displayName = classInfo?.display_name || box.label
+      ctx.fillText(`${displayName} ${index + 1}`, x, y - 5)
     })
   }
 
   const deleteBox = (index: number) => {
     setBoundingBoxes(prev => prev.filter((_, i) => i !== index))
     drawCanvas()
+  }
+
+  const toggleAttribute = (attrName: string) => {
+    setSelectedAttributes(prev => {
+      if (prev.includes(attrName)) {
+        return prev.filter(a => a !== attrName)
+      } else {
+        return [...prev, attrName]
+      }
+    })
   }
 
   const saveAnnotation = async () => {
@@ -319,6 +407,107 @@ export default function AnnotatePage() {
                 </div>
               </div>
               
+              {/* Hierarchical Annotation Selectors */}
+              <div className="mb-4 space-y-3 p-4 bg-gray-50 rounded-lg">
+                {/* Type Selector */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    1. Select Type:
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(availableClasses).map(([className, classInfo]) => (
+                      <button
+                        key={className}
+                        onClick={() => setSelectedClass(className)}
+                        className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          selectedClass === className
+                            ? 'text-white shadow-md'
+                            : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                        }`}
+                        style={{
+                          backgroundColor: selectedClass === className ? classInfo.color : undefined
+                        }}
+                      >
+                        {classInfo.display_name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Color Selector */}
+                {Object.keys(colorAttributes).length > 0 && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      2. Select Color (Optional):
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={() => setSelectedColor(null)}
+                        className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          selectedColor === null
+                            ? 'bg-gray-300 text-gray-700 shadow-md'
+                            : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                        }`}
+                      >
+                        None
+                      </button>
+                      {Object.entries(colorAttributes).map(([colorName, colorInfo]) => (
+                        <button
+                          key={colorName}
+                          onClick={() => setSelectedColor(colorName)}
+                          className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors border-2 ${
+                            selectedColor === colorName
+                              ? 'border-black shadow-md'
+                              : 'border-transparent hover:border-gray-300'
+                          }`}
+                          style={{
+                            backgroundColor: colorInfo.color,
+                            color: ['white', 'yellow', 'transparent'].includes(colorName) ? '#000' : '#fff'
+                          }}
+                        >
+                          {colorInfo.display_name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Additional Attributes */}
+                {Object.keys(additionalAttributes).length > 0 && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      3. Additional Attributes (Optional):
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {Object.entries(additionalAttributes).map(([attrName, attrInfo]) => (
+                        <button
+                          key={attrName}
+                          onClick={() => toggleAttribute(attrName)}
+                          className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                            selectedAttributes.includes(attrName)
+                              ? 'bg-blue-600 text-white shadow-md'
+                              : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+                          }`}
+                        >
+                          {attrInfo.display_name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Selection Summary */}
+                <div className="pt-2 border-t border-gray-300">
+                  <p className="text-xs text-gray-600">
+                    <strong>Drawing:</strong> {availableClasses[selectedClass]?.display_name}
+                    {selectedColor && <span className="text-blue-600"> • {colorAttributes[selectedColor]?.display_name}</span>}
+                    {selectedAttributes.length > 0 && (
+                      <span className="text-purple-600"> • {selectedAttributes.map(a => additionalAttributes[a]?.display_name).join(', ')}</span>
+                    )}
+                  </p>
+                </div>
+              </div>
+              
               <div 
                 ref={containerRef}
                 className="relative border rounded-lg overflow-hidden bg-gray-100"
@@ -333,10 +522,19 @@ export default function AnnotatePage() {
                     if (canvasRef.current && imageRef.current) {
                       const canvas = canvasRef.current
                       const img = imageRef.current
-                      canvas.width = img.offsetWidth
-                      canvas.height = img.offsetHeight
-                      drawCanvas()
+                      
+                      // Set canvas size to match the displayed image size
+                      const rect = img.getBoundingClientRect()
+                      canvas.width = rect.width
+                      canvas.height = rect.height
+                      
+                      // Small delay to ensure image is fully rendered
+                      setTimeout(() => drawCanvas(), 50)
                     }
+                  }}
+                  onError={(e) => {
+                    console.error('Image load error:', e)
+                    toast.error('Failed to load image')
                   }}
                 />
                 <canvas
@@ -383,9 +581,34 @@ export default function AnnotatePage() {
                     {boundingBoxes.length}
                   </div>
                   <div className="text-sm text-green-700">
-                    Shrimp Detected
+                    Total Annotated
                   </div>
                 </div>
+                
+                {/* Class Statistics */}
+                {Object.keys(availableClasses).length > 1 && (
+                  <div className="p-4 bg-gray-50 rounded-lg">
+                    <h4 className="font-medium text-gray-900 mb-2">By Class:</h4>
+                    <div className="space-y-1">
+                      {Object.entries(availableClasses).map(([className, classInfo]) => {
+                        const count = boundingBoxes.filter(box => box.label === className).length
+                        if (count === 0) return null
+                        return (
+                          <div key={className} className="flex items-center justify-between text-sm">
+                            <div className="flex items-center gap-2">
+                              <div 
+                                className="w-2 h-2 rounded-full"
+                                style={{ backgroundColor: classInfo.color }}
+                              />
+                              <span>{classInfo.display_name}</span>
+                            </div>
+                            <span className="font-medium">{count}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
                 
                 <div className="space-y-2">
                   <h4 className="font-medium text-gray-900">Instructions:</h4>
@@ -401,20 +624,58 @@ export default function AnnotatePage() {
                   <div>
                     <h4 className="font-medium text-gray-900 mb-2">Bounding Boxes:</h4>
                     <div className="space-y-2 max-h-40 overflow-y-auto">
-                      {boundingBoxes.map((box, index) => (
-                        <div
-                          key={index}
-                          className="flex items-center justify-between p-2 bg-gray-50 rounded text-sm"
-                        >
-                          <span>{box.label} #{index + 1}</span>
-                          <button
-                            onClick={() => deleteBox(index)}
-                            className="text-red-500 hover:text-red-700"
+                      {boundingBoxes.map((box, index) => {
+                        const classInfo = availableClasses[box.label || 'shrimp']
+                        const colorInfo = box.color ? colorAttributes[box.color] : null
+                        return (
+                          <div
+                            key={index}
+                            className="flex items-center justify-between p-2 bg-gray-50 rounded text-sm"
                           >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ))}
+                            <div className="flex flex-col gap-1 flex-1">
+                              <div className="flex items-center gap-2">
+                                <div 
+                                  className="w-3 h-3 rounded-full"
+                                  style={{ backgroundColor: classInfo?.color || '#10B981' }}
+                                />
+                                <span className="font-medium">{classInfo?.display_name || box.label} #{index + 1}</span>
+                              </div>
+                              {(box.color || (box.attributes && box.attributes.length > 0)) && (
+                                <div className="flex flex-wrap gap-1 ml-5 text-xs">
+                                  {colorInfo && (
+                                    <span 
+                                      className="px-2 py-0.5 rounded"
+                                      style={{ 
+                                        backgroundColor: colorInfo.color + '30',
+                                        color: '#374151'
+                                      }}
+                                    >
+                                      {colorInfo.display_name}
+                                    </span>
+                                  )}
+                                  {box.attributes?.map(attr => {
+                                    const attrInfo = additionalAttributes[attr]
+                                    return attrInfo ? (
+                                      <span 
+                                        key={attr}
+                                        className="px-2 py-0.5 rounded bg-blue-100 text-blue-700"
+                                      >
+                                        {attrInfo.display_name}
+                                      </span>
+                                    ) : null
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                            <button
+                              onClick={() => deleteBox(index)}
+                              className="text-red-500 hover:text-red-700 ml-2"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
                 )}

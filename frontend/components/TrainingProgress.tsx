@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Activity, CheckCircle, XCircle, Clock } from 'lucide-react'
 
 interface TrainingProgressProps {
@@ -22,41 +22,72 @@ interface TrainingUpdate {
 export default function TrainingProgress({ isVisible, onClose }: TrainingProgressProps) {
   const [trainingData, setTrainingData] = useState<TrainingUpdate | null>(null)
   const [logs, setLogs] = useState<string[]>([])
-  const [ws, setWs] = useState<WebSocket | null>(null)
+  const prevStatusRef = useRef<string | undefined>(undefined)
+  const prevEpochRef = useRef<number | undefined>(undefined)
 
   useEffect(() => {
-    if (isVisible) {
-      // Use polling instead of WebSocket for more reliable updates
-      const pollTrainingStatus = async () => {
-        try {
-          const response = await fetch('/api/train/status')
-          const data = await response.json()
+    if (!isVisible) {
+      // Reset refs when modal closes
+      prevStatusRef.current = undefined
+      prevEpochRef.current = undefined
+      return
+    }
+    
+    // Use polling for reliable updates
+    const pollTrainingStatus = async () => {
+      try {
+        const response = await fetch('/api/train/status')
+        const data = await response.json()
+        
+        if (data.success && data.status) {
+          const status = data.status
           
-          if (data.success && data.status) {
-            const status = data.status
-            setTrainingData(status)
+          setTrainingData(status)
+          
+          // Add to logs - only add new entries when status changes or epoch changes
+          const shouldLog = 
+            prevStatusRef.current !== status.status || 
+            prevEpochRef.current !== status.current_epoch ||
+            (status.status === 'preparing' && prevStatusRef.current !== 'preparing') ||
+            (status.status === 'training' && prevEpochRef.current === undefined)
+          
+          if (shouldLog) {
+            let logMessage = `[${new Date().toLocaleTimeString()}] ${status.message}`
             
-            // Add to logs
-            const logMessage = `[${new Date().toLocaleTimeString()}] ${status.message}`
+            // Add more detail for training epochs
+            if (status.status === 'training' && status.current_epoch > 0) {
+              logMessage += ` - Epoch ${status.current_epoch}/${status.total_epochs}`
+              if (status.loss !== null && status.loss !== undefined) {
+                logMessage += ` - Loss: ${status.loss.toFixed(4)}`
+              }
+            }
+            
             setLogs(prev => {
+              // Don't duplicate the same log message
+              if (prev.length > 0 && prev[prev.length - 1] === logMessage) {
+                return prev
+              }
               const newLogs = [...prev, logMessage]
-              return newLogs.slice(-20) // Keep only last 20 logs
+              return newLogs.slice(-50) // Keep last 50 logs for more history
             })
+            
+            prevStatusRef.current = status.status
+            prevEpochRef.current = status.current_epoch
           }
-        } catch (error) {
-          console.error('Error polling training status:', error)
         }
+      } catch (error) {
+        console.error('Error polling training status:', error)
       }
-      
-      // Poll every 2 seconds
-      const interval = setInterval(pollTrainingStatus, 2000)
-      
-      // Initial poll
-      pollTrainingStatus()
-      
-      return () => {
-        clearInterval(interval)
-      }
+    }
+    
+    // Poll every 1 second for fast updates during training
+    const interval = setInterval(pollTrainingStatus, 1000)
+    
+    // Initial poll immediately
+    pollTrainingStatus()
+    
+    return () => {
+      clearInterval(interval)
     }
   }, [isVisible])
 
@@ -133,16 +164,21 @@ export default function TrainingProgress({ isVisible, onClose }: TrainingProgres
           </div>
 
           {/* Training Details */}
-          {trainingData && (trainingData.status === 'training' || trainingData.status === 'completed') && (
+          {(trainingData?.status === 'preparing' || trainingData?.status === 'training' || trainingData?.status === 'completed') && (
             <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
               <div>
                 <p className="text-sm font-medium text-gray-700">Epochs</p>
                 <p className="text-lg font-semibold">
-                  {trainingData.current_epoch || 0} / {trainingData.total_epochs || 0}
+                  {trainingData?.current_epoch || 0} / {trainingData?.total_epochs || 0}
                 </p>
+                {trainingData?.status === 'training' && trainingData?.total_epochs > 0 && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    {Math.round(((trainingData.current_epoch || 0) / trainingData.total_epochs) * 100)}% complete
+                  </p>
+                )}
               </div>
               
-              {trainingData.loss && (
+              {trainingData?.loss !== null && trainingData?.loss !== undefined && (
                 <div>
                   <p className="text-sm font-medium text-gray-700">Loss</p>
                   <p className="text-lg font-semibold">
@@ -151,11 +187,20 @@ export default function TrainingProgress({ isVisible, onClose }: TrainingProgres
                 </div>
               )}
               
-              {trainingData.accuracy && (
+              {trainingData?.accuracy !== null && trainingData?.accuracy !== undefined && (
                 <div>
                   <p className="text-sm font-medium text-gray-700">Accuracy (mAP50)</p>
                   <p className="text-lg font-semibold">
                     {(trainingData.accuracy * 100).toFixed(1)}%
+                  </p>
+                </div>
+              )}
+              
+              {trainingData?.status === 'preparing' && (
+                <div className="col-span-2">
+                  <p className="text-sm font-medium text-gray-700">Status</p>
+                  <p className="text-sm text-gray-600">
+                    Preparing dataset and initializing model...
                   </p>
                 </div>
               )}

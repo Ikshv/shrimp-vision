@@ -123,11 +123,14 @@ export default function TrainPage() {
 
   useEffect(() => {
     let interval: NodeJS.Timeout
-    if (isTraining) {
-      interval = setInterval(fetchTrainingStatus, 2000)
+    if (isTraining || trainingStatus.status === 'preparing' || trainingStatus.status === 'training') {
+      // Poll more frequently during active training (every 1 second)
+      interval = setInterval(fetchTrainingStatus, 1000)
     }
-    return () => clearInterval(interval)
-  }, [isTraining])
+    return () => {
+      if (interval) clearInterval(interval)
+    }
+  }, [isTraining, trainingStatus.status])
 
   const fetchAnnotationStats = async () => {
     try {
@@ -164,18 +167,61 @@ export default function TrainPage() {
       return
     }
 
+    // Show verification steps immediately
     setIsTraining(true)
     setShowTrainingProgress(true)
+    
+    // Step 1: Initial verification
+    setTrainingStatus(prev => ({
+      ...prev,
+      status: 'preparing',
+      message: 'Verifying dataset and configuration...',
+      progress: 0,
+      current_epoch: 0,
+      total_epochs: config.epochs
+    }))
+    
+    toast.loading('Verifying training setup...', { id: 'training-start' })
+    
     try {
+      // Show verification steps
+      setTimeout(() => {
+        setTrainingStatus(prev => ({
+          ...prev,
+          message: `✓ Verified ${annotationStats.annotated_images} annotated images`,
+          progress: 5
+        }))
+        toast.loading('Checking dataset format...', { id: 'training-start' })
+      }, 500)
+      
+      setTimeout(() => {
+        setTrainingStatus(prev => ({
+          ...prev,
+          message: `✓ Verified model configuration (${modelTypes[config.model_type].name})`,
+          progress: 10
+        }))
+        toast.loading('Initializing model trainer...', { id: 'training-start' })
+      }, 1000)
+      
       const response = await axios.post('/api/train/start', config)
+      
       if (response.data.success) {
-        toast.success('Training started successfully')
+        // Update with initial status from server
+        if (response.data.status) {
+          setTrainingStatus(response.data.status)
+        }
+        toast.success('Training started successfully!', { id: 'training-start' })
       }
     } catch (error: any) {
       console.error('Error starting training:', error)
-      toast.error(error.response?.data?.detail || 'Failed to start training')
+      toast.error(error.response?.data?.detail || 'Failed to start training', { id: 'training-start' })
       setIsTraining(false)
       setShowTrainingProgress(false)
+      setTrainingStatus(prev => ({
+        ...prev,
+        status: 'failed',
+        message: error.response?.data?.detail || 'Failed to start training'
+      }))
     }
   }
 

@@ -188,6 +188,11 @@ export default function UploadPage() {
                       src={getImageUrl(image.path)}
                       alt={image.original_name}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement
+                        target.style.display = 'none'
+                        console.error('Failed to load image:', image.path)
+                      }}
                     />
                   </div>
                   

@@ -409,6 +409,11 @@ export default function TestPage() {
                         src={getImageUrl(inferenceResult.annotated_image_path)}
                         alt="Detection result"
                         className="w-full rounded-lg shadow-sm"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement
+                          target.style.display = 'none'
+                          console.error('Failed to load annotated image')
+                        }}
                       />
                     </div>
                   )}

@@ -231,6 +231,11 @@ export default function GalleryPage() {
                     className={`w-full object-cover ${
                       viewMode === 'grid' ? 'h-48' : 'h-32'
                     }`}
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement
+                      target.style.display = 'none'
+                      console.error('Failed to load image:', image.path)
+                    }}
                   />
                   
                   {/* Selection checkbox */}
