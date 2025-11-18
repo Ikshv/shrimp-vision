@@ -5,20 +5,25 @@ const nextConfig = {
     domains: ['localhost', 'backend'],
     unoptimized: true
   },
-  webpack: (config, { isServer }) => {
-    // Ensure path aliases work in Docker build
+  webpack: (config) => {
+    // Ensure path aliases work in Docker build - Next.js should read from tsconfig.json
+    // but we add explicit webpack aliases as fallback
     const path = require('path')
-    const rootPath = path.resolve(__dirname)
+    const rootPath = path.resolve(process.cwd())
+    
+    // Override alias resolution to match tsconfig.json paths
     config.resolve.alias = {
       ...config.resolve.alias,
       '@': rootPath,
-      '@/lib': path.join(rootPath, 'lib'),
     }
-    // Ensure modules are resolved correctly
-    config.resolve.modules = [
-      ...(config.resolve.modules || []),
-      rootPath,
+    
+    // Ensure extensions are resolved
+    config.resolve.extensions = [
+      ...config.resolve.extensions,
+      '.ts',
+      '.tsx',
     ]
+    
     return config
   },
   async rewrites() {
