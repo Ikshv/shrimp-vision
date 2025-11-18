@@ -5,11 +5,13 @@ const nextConfig = {
     domains: ['localhost', 'backend'],
     unoptimized: true
   },
-  webpack: (config) => {
+  webpack: (config, { isServer }) => {
     // Ensure path aliases work in Docker build
+    const path = require('path')
     config.resolve.alias = {
       ...config.resolve.alias,
-      '@': require('path').resolve(__dirname),
+      '@': path.resolve(__dirname),
+      '@/lib': path.resolve(__dirname, 'lib'),
     }
     return config
   },
