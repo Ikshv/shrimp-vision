@@ -5,7 +5,7 @@ import { Upload, Download, Eye, Target, BarChart3, Zap } from 'lucide-react'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 import axios from 'axios'
-import { getImageUrl } from '@/lib/config'
+import { getImageUrl } from '../../lib/config'
 
 interface DetectionResult {
   x: number
