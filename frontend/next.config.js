@@ -5,6 +5,14 @@ const nextConfig = {
     domains: ['localhost', 'backend'],
     unoptimized: true
   },
+  webpack: (config) => {
+    // Ensure path aliases work in Docker build
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      '@': require('path').resolve(__dirname),
+    }
+    return config
+  },
   async rewrites() {
     // Use environment variable for backend URL, fallback to localhost for dev
     const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3100'
