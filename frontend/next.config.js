@@ -8,11 +8,17 @@ const nextConfig = {
   webpack: (config, { isServer }) => {
     // Ensure path aliases work in Docker build
     const path = require('path')
+    const rootPath = path.resolve(__dirname)
     config.resolve.alias = {
       ...config.resolve.alias,
-      '@': path.resolve(__dirname),
-      '@/lib': path.resolve(__dirname, 'lib'),
+      '@': rootPath,
+      '@/lib': path.join(rootPath, 'lib'),
     }
+    // Ensure modules are resolved correctly
+    config.resolve.modules = [
+      ...(config.resolve.modules || []),
+      rootPath,
+    ]
     return config
   },
   async rewrites() {
