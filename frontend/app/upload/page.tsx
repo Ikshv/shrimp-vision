@@ -6,7 +6,7 @@ import { Upload, X, Image as ImageIcon, CheckCircle, AlertCircle, Grid3X3 } from
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 import axios from 'axios'
-import { getImageUrl } from '../../lib/config'
+import { getImageUrl } from '@/lib/config'
 
 interface UploadedImage {
   id: string

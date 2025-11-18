@@ -5,7 +5,7 @@ import { ArrowLeft, ArrowRight, Save, Target, RotateCcw, X } from 'lucide-react'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 import axios from 'axios'
-import { getImageUrl } from '../../lib/config'
+import { getImageUrl } from '@/lib/config'
 
 interface ImageData {
   id: string

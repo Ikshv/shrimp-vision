@@ -5,7 +5,7 @@ import { Upload, Trash2, Eye, Download, ArrowLeft, Grid3X3 } from 'lucide-react'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 import axios from 'axios'
-import { getImageUrl } from '../../lib/config'
+import { getImageUrl } from '@/lib/config'
 
 interface ImageData {
   id: string
