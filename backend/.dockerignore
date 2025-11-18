@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Virtual environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+README.md
+
+# Logs
+*.log
+
+# Model files (large, should be mounted as volumes)
+*.pt
+models/*/
+!models/.gitkeep
+
+# Data directories (should be mounted as volumes)
+static/uploads/*
+!static/uploads/.gitkeep
+static/annotations/*
+!static/annotations/.gitkeep
+dataset/images/*
+dataset/labels/*
+!dataset/.gitkeep
+exports/*
+!exports/.gitkeep
+

@@ -7,17 +7,20 @@ A complete full-stack application for shrimp detection and counting using comput
 ![Next.js](https://img.shields.io/badge/Next.js-14-black?style=for-the-badge&logo=next.js)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-green?style=for-the-badge&logo=fastapi)
 ![YOLOv8](https://img.shields.io/badge/YOLOv8-Ultralytics-red?style=for-the-badge)
+![Docker](https://img.shields.io/badge/Docker-Ready-blue?style=for-the-badge&logo=docker)
 
 ## ✨ Features
 
 ### 🖼️ Image Management
-- **Drag & Drop Upload**: Upload multiple aquarium images with support for JPG, PNG, BMP, TIFF
-- **Image Preview**: Thumbnail grid with image metadata (dimensions, file size, format)
+- **Drag & Drop Upload**: Upload multiple aquarium images with support for JPG, PNG, WEBP, HEIC, BMP, TIFF
+- **Image Gallery**: Browse and manage all uploaded images
 - **Batch Processing**: Handle multiple images simultaneously
 - **Image Validation**: Automatic format and size validation
 
 ### 🎯 Annotation Tool
 - **Interactive Bounding Boxes**: Click and drag to draw precise bounding boxes around shrimp
+- **Multi-class Support**: 6 different classes (Shrimp, Juvenile, Adult, Egg, Molt, Dead)
+- **Color-coded Classes**: Visual distinction with unique colors per class
 - **Real-time Feedback**: Visual feedback with labeled annotations
 - **Navigation**: Easy previous/next navigation between images
 - **Auto-save**: Automatic saving of annotation progress
@@ -26,6 +29,7 @@ A complete full-stack application for shrimp detection and counting using comput
 ### 🧠 Model Training
 - **YOLOv8 Integration**: Support for all YOLOv8 model sizes (nano, small, medium, large, xlarge)
 - **Live Training Progress**: Real-time monitoring of training metrics (loss, accuracy, epochs)
+- **WebSocket Updates**: Real-time progress updates via WebSocket
 - **Configurable Parameters**: Adjustable epochs, batch size, learning rate, image size
 - **Dataset Splitting**: Automatic train/validation split (80/20 by default)
 - **Early Stopping**: Built-in early stopping to prevent overfitting
@@ -42,36 +46,58 @@ A complete full-stack application for shrimp detection and counting using comput
 - **Dataset Export**: Export complete datasets in YOLO format
 - **Annotation Export**: Export annotations in JSON or YOLO format
 - **ZIP Archives**: Convenient packaging of all assets
+- **Docker Support**: Containerized deployment ready
 
 ## 🏗️ Architecture
 
 ```
-Shrimp Vision/
+shrimp-vision/
 ├── backend/                 # FastAPI backend
 │   ├── main.py             # FastAPI application entry point
+│   ├── run.py              # Server startup script
 │   ├── routes/             # API route handlers
 │   │   ├── upload.py       # Image upload endpoints
 │   │   ├── annotate.py     # Annotation management
 │   │   ├── train.py        # Model training endpoints
 │   │   ├── inference.py    # Model inference endpoints
-│   │   └── export.py       # Data export endpoints
+│   │   ├── export.py       # Data export endpoints
+│   │   └── websocket.py    # WebSocket for real-time updates
 │   ├── services/           # Core business logic
 │   │   ├── dataset_manager.py    # Dataset preparation and management
 │   │   ├── model_trainer.py      # YOLOv8 training pipeline
 │   │   └── inference_engine.py   # Model inference engine
+│   ├── config/             # Configuration files
+│   │   └── classes.py      # Multi-class definitions
+│   ├── static/             # Static files (uploads, annotations)
+│   ├── models/             # Trained model storage
+│   ├── dataset/            # Training datasets
 │   └── requirements.txt    # Python dependencies
 ├── frontend/               # Next.js frontend
-│   ├── app/               # Next.js 13+ app directory
+│   ├── app/               # Next.js 14+ app directory
 │   │   ├── page.tsx       # Home page
 │   │   ├── upload/        # Image upload page
 │   │   ├── annotate/      # Annotation tool page
 │   │   ├── train/         # Model training page
-│   │   └── test/          # Testing and export page
+│   │   ├── test/          # Testing and inference page
+│   │   └── gallery/       # Image gallery page
+│   ├── components/        # React components
+│   │   └── TrainingProgress.tsx
 │   ├── lib/               # Utility functions
-│   │   ├── api.ts         # API client configuration
-│   │   └── utils.ts       # Helper functions
+│   │   └── config.ts      # API configuration
 │   └── package.json       # Node.js dependencies
-└── README.md              # This file
+├── scripts/                # Utility scripts
+│   ├── start.bat          # Windows startup script
+│   ├── restart.sh         # Restart application
+│   ├── setup.sh           # Initial setup
+│   └── README.md          # Scripts documentation
+├── docs/                   # Additional documentation
+│   ├── DOCKER.md          # Docker setup guide
+│   ├── STARTUP_GUIDE.md   # Detailed startup instructions
+│   └── ...                # Other guides
+├── docker-compose.yml     # Docker orchestration
+├── start.sh               # Main startup script (Linux/macOS)
+├── README.md              # This file
+└── QUICKSTART.md         # Quick start guide
 ```
 
 ## 🚀 Quick Start
@@ -81,13 +107,43 @@ Shrimp Vision/
 - **Python 3.11+** with pip
 - **Node.js 18+** with npm
 - **Git** for cloning the repository
+- **Docker** (optional, for containerized deployment)
 
 ### Installation
+
+#### Option 1: Docker (Recommended)
+
+```bash
+git clone <repository-url>
+cd shrimp-vision
+docker-compose up --build
+```
+
+See [Docker Setup Guide](docs/DOCKER.md) for detailed instructions.
+
+#### Option 2: Automated Script
+
+**macOS/Linux:**
+```bash
+git clone <repository-url>
+cd shrimp-vision
+chmod +x start.sh
+./start.sh
+```
+
+**Windows:**
+```cmd
+git clone <repository-url>
+cd shrimp-vision
+scripts\start.bat
+```
+
+#### Option 3: Manual Setup
 
 1. **Clone the repository**
    ```bash
    git clone <repository-url>
-   cd SKRIMP
+   cd shrimp-vision
    ```
 
 2. **Set up the backend**
@@ -104,42 +160,50 @@ Shrimp Vision/
    npm install
    ```
 
-4. **Create environment file**
-   ```bash
-   # In frontend directory
-   echo "NEXT_PUBLIC_API_URL=http://localhost:8100" > .env.local
-   ```
-
 ### Running the Application
+
+#### Using Docker
+```bash
+docker-compose up
+```
+
+#### Using Startup Script
+```bash
+./start.sh  # macOS/Linux
+scripts\start.bat  # Windows
+```
+
+#### Manual Start
 
 1. **Start the backend server**
    ```bash
    cd backend
    source venv/bin/activate  # On Windows: venv\Scripts\activate
-   python main.py
+   python run.py
    ```
-   The API will be available at `http://localhost:8100`
+   The API will be available at `http://localhost:3100`
 
 2. **Start the frontend development server**
    ```bash
    cd frontend
    npm run dev
    ```
-   The web application will be available at `http://localhost:3100`
+   The web application will be available at `http://localhost:3099`
 
 3. **Open your browser**
-   Navigate to `http://localhost:3100` to start using Shrimp Vision!
+   Navigate to `http://localhost:3099` to start using Shrimp Vision!
 
 ## 📖 Usage Guide
 
 ### 1. Upload Images
 - Navigate to the **Upload** page
 - Drag and drop aquarium images or click to select files
-- Supported formats: JPG, PNG, BMP, TIFF
+- Supported formats: JPG, PNG, WEBP, HEIC, BMP, TIFF
 - Recommended: High-resolution images (640×640+ pixels) with good lighting
 
 ### 2. Annotate Shrimp
 - Go to the **Annotate** page
+- Select a class from the button group (Shrimp, Juvenile, Adult, Egg, Molt, Dead)
 - Click and drag to draw bounding boxes around each shrimp
 - Use the navigation buttons to move between images
 - Save annotations regularly using the "Save" button
@@ -154,7 +218,7 @@ Shrimp Vision/
   - **Large (yolov8l)**: Higher accuracy, slower inference
   - **XLarge (yolov8x)**: Highest accuracy, slowest inference
 - Adjust training parameters (epochs, batch size, learning rate)
-- Click "Start Training" and monitor progress
+- Click "Start Training" and monitor progress in real-time
 - Training typically takes 10-60 minutes depending on dataset size
 
 ### 4. Test & Export
@@ -168,50 +232,53 @@ Shrimp Vision/
 
 ### Backend Configuration
 
-The backend can be configured by modifying environment variables or the main configuration in `backend/main.py`:
+The backend runs on port `3100` by default. Configuration can be modified in `backend/run.py`:
 
 ```python
-# Training defaults
-DEFAULT_EPOCHS = 100
-DEFAULT_BATCH_SIZE = 16
-DEFAULT_IMAGE_SIZE = 640
-DEFAULT_LEARNING_RATE = 0.01
-
-# Dataset splitting
-DEFAULT_TRAIN_SPLIT = 0.8
-DEFAULT_VAL_SPLIT = 0.2
+# Server configuration
+host = "0.0.0.0"  # Listen on all interfaces
+port = 3100
 ```
 
 ### Frontend Configuration
 
-Frontend configuration is handled through environment variables in `.env.local`:
+Frontend configuration is handled through environment variables in `frontend/.env.local`:
 
 ```bash
-NEXT_PUBLIC_API_URL=http://localhost:8100  # Backend API URL
+NEXT_PUBLIC_API_URL=http://localhost:3100
 ```
+
+The frontend runs on port `3099` by default (configured in `package.json`).
 
 ## 📊 API Documentation
 
-### Upload Endpoints
+When the backend is running, interactive API documentation is available at:
+- **Swagger UI**: http://localhost:3100/docs
+- **ReDoc**: http://localhost:3100/redoc
+
+### Main Endpoints
+
+**Upload**
 - `POST /api/upload/` - Upload multiple images
 - `GET /api/upload/list` - List uploaded images
 - `DELETE /api/upload/{id}` - Delete an image
 
-### Annotation Endpoints
+**Annotation**
 - `POST /api/annotate/save` - Save annotation for an image
 - `GET /api/annotate/{id}` - Get annotation for an image
+- `GET /api/annotate/classes` - Get available classes
 - `GET /api/annotate/stats/summary` - Get annotation statistics
 
-### Training Endpoints
+**Training**
 - `POST /api/train/start` - Start model training
 - `GET /api/train/status` - Get training status
 - `POST /api/train/stop` - Stop training
 
-### Inference Endpoints
+**Inference**
 - `POST /api/inference/predict` - Run inference on an image
 - `GET /api/inference/models/available` - List available models
 
-### Export Endpoints
+**Export**
 - `POST /api/export/dataset` - Export complete dataset
 - `GET /api/export/model/{name}` - Download a specific model
 
@@ -222,7 +289,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8100  # Backend API URL
 ```bash
 cd backend
 source venv/bin/activate
-python main.py  # Development server with auto-reload
+python run.py  # Development server with auto-reload
 ```
 
 ### Frontend Development
@@ -231,30 +298,37 @@ python main.py  # Development server with auto-reload
 cd frontend
 npm run dev     # Development server with hot reload
 npm run build   # Production build
-npm run start   # Production server
+npm start       # Production server
 ```
 
 ### Code Structure
 
 - **Backend**: FastAPI with async/await patterns, Pydantic models for validation
-- **Frontend**: Next.js 13+ with App Router, TypeScript, Tailwind CSS
+- **Frontend**: Next.js 14+ with App Router, TypeScript, Tailwind CSS
 - **State Management**: React hooks with local state
 - **API Communication**: Axios with interceptors for error handling
+- **Real-time Updates**: WebSocket for training progress
 - **UI Components**: Custom components with Tailwind CSS styling
 
-## 🧪 Testing
+## 🐳 Docker Deployment
 
-### Backend Testing
+Shrimp Vision is fully containerized and ready for deployment:
+
 ```bash
-cd backend
-python -m pytest tests/  # Run backend tests
+# Build and start
+docker-compose up --build
+
+# Run in background
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop
+docker-compose down
 ```
 
-### Frontend Testing
-```bash
-cd frontend
-npm test  # Run frontend tests
-```
+See [Docker Setup Guide](docs/DOCKER.md) for detailed instructions.
 
 ## 📈 Performance Tips
 
@@ -278,12 +352,12 @@ npm test  # Run frontend tests
 **Backend won't start**
 - Ensure Python 3.11+ is installed
 - Check that all dependencies are installed: `pip install -r requirements.txt`
-- Verify port 8100 is not in use
+- Verify port 3100 is not in use: `lsof -i:3100` (macOS/Linux) or `netstat -ano | findstr :3100` (Windows)
 
 **Frontend won't start**
 - Ensure Node.js 18+ is installed
 - Install dependencies: `npm install`
-- Check that port 3100 is not in use
+- Check that port 3099 is not in use
 
 **Training fails**
 - Ensure you have at least 5 annotated images
@@ -295,12 +369,38 @@ npm test  # Run frontend tests
 - Reduce image size in training configuration
 - Use GPU for inference if available
 
+**Docker issues**
+- Ensure Docker and Docker Compose are installed
+- Check ports 3099 and 3100 are not in use
+- See [Docker Setup Guide](docs/DOCKER.md) for detailed troubleshooting
+
 ### Getting Help
 
 1. Check the [Issues](https://github.com/your-repo/issues) page
-2. Review the API documentation at `http://localhost:8100/docs`
+2. Review the API documentation at `http://localhost:3100/docs`
 3. Check browser console for frontend errors
 4. Check backend logs for server errors
+5. Review the [Startup Guide](docs/STARTUP_GUIDE.md) for common issues
+
+## 📚 Documentation
+
+- **[Quick Start Guide](QUICKSTART.md)** - Get started in 5 minutes
+- **[Docker Setup](docs/DOCKER.md)** - Containerized deployment
+- **[Startup Guide](docs/STARTUP_GUIDE.md)** - Detailed setup instructions
+- **[Network Setup](docs/NETWORK_SETUP.md)** - Network configuration
+- **[Security Guidelines](SECURITY.md)** - Security best practices
+- **[Image Loading Fix](docs/IMAGE_LOADING_FIX.md)** - Troubleshooting image issues
+- **[Image Rendering Fixes](docs/IMAGE_RENDERING_FIXES.md)** - Image rendering solutions
+- **[Hierarchical Tagging Guide](docs/HIERARCHICAL_TAGGING_GUIDE.md)** - Advanced annotation
+
+## 🔒 Security
+
+This project follows security best practices:
+- Environment variables for sensitive configuration
+- User data excluded from git
+- Comprehensive `.gitignore` for secrets and keys
+
+See [SECURITY.md](SECURITY.md) for detailed security guidelines.
 
 ## 🤝 Contributing
 

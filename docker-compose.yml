@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: shrimp-vision-backend
+    ports:
+      - "3100:3100"
+    volumes:
+      # Persist data directories
+      - ./backend/static:/app/static
+      - ./backend/models:/app/models
+      - ./backend/dataset:/app/dataset
+      - ./backend/exports:/app/exports
+    environment:
+      - PYTHONUNBUFFERED=1
+      - ENVIRONMENT=production
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3100/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - shrimp-vision-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=http://backend:3100
+    container_name: shrimp-vision-frontend
+    ports:
+      - "3099:3099"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=http://localhost:3100
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - shrimp-vision-network
+
+networks:
+  shrimp-vision-network:
+    driver: bridge
+
+# Optional: Uncomment to use named volumes instead of bind mounts for better performance
+# volumes:
+#   backend_static:
+#   backend_models:
+#   backend_dataset:
+#   backend_exports:
+

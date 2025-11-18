@@ -31,13 +31,16 @@ def main():
     os.makedirs("dataset/labels/val", exist_ok=True)
     os.makedirs("exports", exist_ok=True)
     
+    # Check if running in production (Docker)
+    is_production = os.getenv("ENVIRONMENT", "development") == "production"
+    
     # Start the server
     uvicorn.run(
         "main:app",
         host="0.0.0.0",  # Listen on all interfaces
         port=3100,
-        reload=True,
-        reload_dirs=[str(backend_dir)],
+        reload=not is_production,  # Disable reload in production
+        reload_dirs=[str(backend_dir)] if not is_production else None,
         log_level="info"
     )
 

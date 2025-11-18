@@ -52,12 +52,29 @@ lerna-debug.log*
 out/
 build/
 
-# Environment variables
+# Environment variables and secrets
 .env
+.env.*
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+*.env
+*.secret
+secrets/
+secrets.yaml
+secrets.yml
+config/secrets.*
+# Certificate and key files
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.crt
+*.cer
+*.csr
 
 # Logs
 logs
@@ -138,3 +155,49 @@ backend/static/annotations/.gitkeep
 backend/models/.gitkeep
 backend/dataset/.gitkeep
 backend/exports/.gitkeep
+
+# Exclude specific model files
+backend/yolov8x.pt
+
+# YOLO cache files
+*.cache
+backend/dataset/labels/*.cache
+
+# Additional security - prevent accidental commits
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+*.db-shm
+*.db-wal
+
+# Backup files
+*.bak
+*.backup
+*.old
+*.orig
+*~
+
+# IDE and editor files
+*.swp
+*.swo
+.vscode/
+.idea/
+*.sublime-*
+
+# OS files
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.Spotlight-V100
+.Trashes
+.fseventsd
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
