@@ -17,10 +17,6 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Verify lib directory exists (for debugging)
-RUN ls -la lib/ || echo "lib directory check" && \
-    test -f lib/config.ts && echo "✅ lib/config.ts found" || echo "❌ lib/config.ts missing"
-
 # Set environment variable for build
 ARG NEXT_PUBLIC_API_URL=http://backend:3100
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
