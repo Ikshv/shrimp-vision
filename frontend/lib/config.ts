@@ -20,6 +20,26 @@ export function getImageUrl(imagePath: string): string {
   // This avoids CORS issues and uses the Next.js rewrite rules
   const useProxy = typeof window !== 'undefined'
   
+  // Handle dataset paths - if it starts with /datasets, convert to /static/datasets
+  // Also handle legacy /uploads/ paths and convert to /images/
+  if (imagePath.startsWith('/datasets/')) {
+    let correctedPath = imagePath.replace(/^\/datasets\//, '/static/datasets/')
+    // Convert legacy uploads/ to images/
+    correctedPath = correctedPath.replace('/uploads/', '/images/')
+    return useProxy ? correctedPath : `${API_BASE_URL}${correctedPath}`
+  }
+  
+  // Handle /static/datasets paths with legacy uploads
+  if (imagePath.startsWith('/static/datasets/') && imagePath.includes('/uploads/')) {
+    const correctedPath = imagePath.replace('/uploads/', '/images/')
+    return useProxy ? correctedPath : `${API_BASE_URL}${correctedPath}`
+  }
+  
+  // Handle /temp/ paths (for annotated inference images)
+  if (imagePath.startsWith('/temp/')) {
+    return useProxy ? imagePath : `${API_BASE_URL}${imagePath}`
+  }
+  
   // If the path starts with /static, return as-is for proxy or with base URL for SSR
   if (imagePath.startsWith('/static')) {
     return useProxy ? imagePath : `${API_BASE_URL}${imagePath}`

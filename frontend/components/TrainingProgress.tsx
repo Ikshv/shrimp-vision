@@ -24,6 +24,7 @@ export default function TrainingProgress({ isVisible, onClose }: TrainingProgres
   const [logs, setLogs] = useState<string[]>([])
   const prevStatusRef = useRef<string | undefined>(undefined)
   const prevEpochRef = useRef<number | undefined>(undefined)
+  const lastKnownStatusRef = useRef<TrainingUpdate | null>(null) // Keep last known good status
 
   useEffect(() => {
     if (!isVisible) {
@@ -36,12 +37,31 @@ export default function TrainingProgress({ isVisible, onClose }: TrainingProgres
     // Use polling for reliable updates
     const pollTrainingStatus = async () => {
       try {
-        const response = await fetch('/api/train/status')
+        // Add timeout to prevent hanging requests
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 2000) // 2 second timeout
+        
+        const response = await fetch('/api/train/status', {
+          signal: controller.signal,
+          cache: 'no-cache', // Always fetch fresh data
+          headers: {
+            'Cache-Control': 'no-cache'
+          }
+        })
+        
+        clearTimeout(timeoutId)
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
+        
         const data = await response.json()
         
         if (data.success && data.status) {
           const status = data.status
           
+          // Update last known good status
+          lastKnownStatusRef.current = status
           setTrainingData(status)
           
           // Add to logs - only add new entries when status changes or epoch changes
@@ -75,8 +95,17 @@ export default function TrainingProgress({ isVisible, onClose }: TrainingProgres
             prevEpochRef.current = status.current_epoch
           }
         }
-      } catch (error) {
-        console.error('Error polling training status:', error)
+      } catch (error: any) {
+        // On error, keep showing the last known good status instead of resetting
+        // This prevents the UI from showing "idle" when requests fail during training
+        if (lastKnownStatusRef.current) {
+          setTrainingData(lastKnownStatusRef.current)
+        }
+        
+        // Only log non-timeout errors
+        if (error.name !== 'AbortError' && error.code !== 'ECONNRESET' && error.message !== 'socket hang up') {
+          console.error('Error polling training status:', error)
+        }
       }
     }
     

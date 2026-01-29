@@ -24,12 +24,14 @@ def main():
     # Create necessary directories
     os.makedirs("static/uploads", exist_ok=True)
     os.makedirs("static/annotations", exist_ok=True)
+    os.makedirs("temp", exist_ok=True)  # For temporary inference files
     os.makedirs("models", exist_ok=True)
     os.makedirs("dataset/images/train", exist_ok=True)
     os.makedirs("dataset/images/val", exist_ok=True)
     os.makedirs("dataset/labels/train", exist_ok=True)
     os.makedirs("dataset/labels/val", exist_ok=True)
     os.makedirs("exports", exist_ok=True)
+    os.makedirs("datasets", exist_ok=True)  # For multi-dataset support
     
     # Check if running in production (Docker)
     is_production = os.getenv("ENVIRONMENT", "development") == "production"
@@ -40,7 +42,6 @@ def main():
         host="0.0.0.0",  # Listen on all interfaces
         port=3100,
         reload=not is_production,  # Disable reload in production
-        reload_dirs=[str(backend_dir)] if not is_production else None,
         log_level="info"
     )
 

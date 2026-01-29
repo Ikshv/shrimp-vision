@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import Optional, List
@@ -8,8 +8,10 @@ import shutil
 import json
 from pathlib import Path
 from datetime import datetime
+from services.dataset_service import DatasetService
 
 router = APIRouter()
+dataset_service = DatasetService()
 
 class ExportConfig(BaseModel):
     include_images: bool = True
@@ -19,41 +21,58 @@ class ExportConfig(BaseModel):
     format: str = "yolo"  # "yolo", "coco", "both"
 
 @router.post("/dataset")
-async def export_dataset(config: ExportConfig):
+async def export_dataset(
+    config: ExportConfig,
+    dataset_id: Optional[str] = Query(None, description="Dataset ID to export (uses active dataset if not provided)")
+):
     """
     Export the complete dataset as a ZIP file
     """
     try:
+        # Get dataset
+        if dataset_id:
+            dataset = dataset_service.get_dataset(dataset_id)
+            if not dataset:
+                raise HTTPException(status_code=404, detail=f"Dataset {dataset_id} not found")
+        else:
+            dataset = dataset_service.get_active_dataset()
+            if not dataset:
+                raise HTTPException(status_code=400, detail="No active dataset")
+        
+        upload_dir = dataset_service.get_dataset_upload_dir(dataset["id"])
+        annotation_dir = dataset_service.get_dataset_annotation_dir(dataset["id"])
+        dataset_path = dataset_service.get_dataset_path(dataset["id"])
+        
         # Create export directory
         export_dir = "exports"
         os.makedirs(export_dir, exist_ok=True)
         
         # Generate timestamp for unique filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        zip_filename = f"shrimp_dataset_{timestamp}.zip"
+        zip_filename = f"shrimp_dataset_{dataset['name']}_{timestamp}.zip"
         zip_path = os.path.join(export_dir, zip_filename)
         
         with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
             # Add images if requested
-            if config.include_images and os.path.exists("static/uploads"):
-                for filename in os.listdir("static/uploads"):
+            if config.include_images and os.path.exists(upload_dir):
+                for filename in os.listdir(upload_dir):
                     if any(filename.lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.heic', '.heif', '.webp', '.gif']):
-                        file_path = os.path.join("static/uploads", filename)
+                        file_path = os.path.join(upload_dir, filename)
                         zipf.write(file_path, f"images/{filename}")
             
             # Add annotations if requested
-            if config.include_annotations and os.path.exists("static/annotations"):
-                for filename in os.listdir("static/annotations"):
+            if config.include_annotations and os.path.exists(annotation_dir):
+                for filename in os.listdir(annotation_dir):
                     if filename.endswith('.json'):
-                        file_path = os.path.join("static/annotations", filename)
+                        file_path = os.path.join(annotation_dir, filename)
                         zipf.write(file_path, f"annotations/{filename}")
             
             # Add dataset structure if requested
-            if config.include_dataset and os.path.exists("dataset"):
-                for root, dirs, files in os.walk("dataset"):
+            if config.include_dataset and dataset_path and os.path.exists(dataset_path):
+                for root, dirs, files in os.walk(dataset_path):
                     for file in files:
                         file_path = os.path.join(root, file)
-                        arc_path = os.path.relpath(file_path, "dataset")
+                        arc_path = os.path.relpath(file_path, dataset_path)
                         zipf.write(file_path, f"dataset/{arc_path}")
             
             # Add models if requested
@@ -64,11 +83,16 @@ async def export_dataset(config: ExportConfig):
                         zipf.write(file_path, f"models/{filename}")
             
             # Add metadata
+            image_count = len([f for f in os.listdir(upload_dir) if any(f.lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.heic', '.heif', '.webp', '.gif'])]) if os.path.exists(upload_dir) else 0
+            annotation_count = len([f for f in os.listdir(annotation_dir) if f.endswith('.json')]) if os.path.exists(annotation_dir) else 0
+            
             metadata = {
                 "export_timestamp": timestamp,
                 "export_config": config.dict(),
-                "total_images": len([f for f in os.listdir("static/uploads") if any(f.lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.heic', '.heif', '.webp', '.gif'])]) if os.path.exists("static/uploads") else 0,
-                "total_annotations": len([f for f in os.listdir("static/annotations") if f.endswith('.json')]) if os.path.exists("static/annotations") else 0,
+                "dataset_id": dataset["id"],
+                "dataset_name": dataset["name"],
+                "total_images": image_count,
+                "total_annotations": annotation_count,
                 "total_models": len([f for f in os.listdir("models") if f.endswith('.pt')]) if os.path.exists("models") else 0
             }
             
@@ -80,6 +104,8 @@ async def export_dataset(config: ExportConfig):
             media_type='application/zip'
         )
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to export dataset: {str(e)}")
 

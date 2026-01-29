@@ -7,6 +7,8 @@ import Link from 'next/link'
 import toast from 'react-hot-toast'
 import axios from 'axios'
 import { getImageUrl } from '@/lib/config'
+import { useDataset } from '@/contexts/DatasetContext'
+import DatasetSelector from '@/components/DatasetSelector'
 
 interface UploadedImage {
   id: string
@@ -20,12 +22,18 @@ interface UploadedImage {
 }
 
 export default function UploadPage() {
+  const { activeDataset, refreshDatasets } = useDataset()
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([])
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return
+
+    if (!activeDataset) {
+      toast.error('Please create or select a dataset first')
+      return
+    }
 
     setIsUploading(true)
     setUploadProgress(0)
@@ -36,7 +44,7 @@ export default function UploadPage() {
     })
 
     try {
-      const response = await axios.post('/api/upload/', formData, {
+      const response = await axios.post(`/api/upload/?dataset_id=${activeDataset.id}`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
@@ -57,6 +65,9 @@ export default function UploadPage() {
             toast.error(error)
           })
         }
+        
+        // Refresh dataset stats to update image count
+        await refreshDatasets()
       }
     } catch (error) {
       console.error('Upload error:', error)
@@ -65,7 +76,7 @@ export default function UploadPage() {
       setIsUploading(false)
       setUploadProgress(0)
     }
-  }, [])
+  }, [activeDataset, refreshDatasets])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -84,9 +95,11 @@ export default function UploadPage() {
 
   const deleteImage = async (imageId: string) => {
     try {
-      await axios.delete(`/api/upload/${imageId}`)
+      await axios.delete(`/api/upload/${imageId}?dataset_id=${activeDataset?.id || ''}`)
       setUploadedImages(prev => prev.filter(img => img.id !== imageId))
       toast.success('Image deleted successfully')
+      // Refresh dataset stats to update image count
+      await refreshDatasets()
     } catch (error) {
       console.error('Delete error:', error)
       toast.error('Failed to delete image')
@@ -125,6 +138,19 @@ export default function UploadPage() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Dataset Selector */}
+        <div className="mb-8">
+          <DatasetSelector />
+        </div>
+
+        {!activeDataset && (
+          <div className="card mb-8 bg-yellow-50 border-yellow-200">
+            <p className="text-yellow-800">
+              ⚠️ Please create or select a dataset before uploading images.
+            </p>
+          </div>
+        )}
+
         {/* Upload Area */}
         <div className="card mb-8">
           <div

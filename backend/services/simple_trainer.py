@@ -32,6 +32,7 @@ class SimpleTrainer:
         self,
         dataset_path: str,
         model_type: str = "yolov8n",
+        model_name: str = "shrimp",
         epochs: int = 100,
         batch_size: int = 16,
         image_size: int = 640,
@@ -50,7 +51,7 @@ class SimpleTrainer:
             
             # Run training in a separate process
             result = await self._run_training_process(
-                dataset_path, model_type, epochs, batch_size, 
+                dataset_path, model_type, model_name, epochs, batch_size, 
                 image_size, learning_rate, progress_callback
             )
             
@@ -65,6 +66,7 @@ class SimpleTrainer:
         self,
         dataset_path: str,
         model_type: str,
+        model_name: str,
         epochs: int,
         batch_size: int,
         image_size: int,
@@ -98,6 +100,7 @@ import traceback
 # Training parameters - use absolute paths
 dataset_path = r"{abs_dataset_path}"
 model_type = "{model_type}"
+model_name = "{model_name}"
 epochs = {epochs}
 batch_size = {batch_size}
 image_size = {image_size}
@@ -123,7 +126,7 @@ try:
         'lr0': learning_rate,
         'device': device,
         'project': models_dir,
-        'name': f'shrimp_detection_{{model_type}}',
+        'name': f'{{model_name}}_{{model_type}}',
         'exist_ok': True,
         'save': True,
         'save_period': 10,
@@ -145,8 +148,8 @@ try:
     results = model.train(**train_params)
     
     # Training completed - find the best model
-    model_name = f'shrimp_detection_{{model_type}}'
-    weights_dir = os.path.join(models_dir, model_name, 'weights')
+    training_run_name = f'{{model_name}}_{{model_type}}'
+    weights_dir = os.path.join(models_dir, training_run_name, 'weights')
     
     print(f"Looking for trained model in: {{weights_dir}}")
     
@@ -164,7 +167,7 @@ try:
         else:
             print(f"Weights directory does not exist: {{weights_dir}}")
             # Check if the run directory exists
-            run_dir = os.path.join(models_dir, model_name)
+            run_dir = os.path.join(models_dir, training_run_name)
             if os.path.exists(run_dir):
                 print(f"Run directory exists: {{run_dir}}")
                 for root, dirs, files in os.walk(run_dir):
@@ -175,7 +178,7 @@ try:
     print(f"Found trained model: {{best_model_path}}")
     
     # Copy the best model to the main models directory with a simple name
-    final_model_path = os.path.join(models_dir, f"shrimp_detection_{{model_type}}_best.pt")
+    final_model_path = os.path.join(models_dir, f"{{model_name}}_{{model_type}}.pt")
     shutil.copy2(best_model_path, final_model_path)
     
     print(f"Model copied to: {{final_model_path}}")
@@ -192,7 +195,10 @@ except Exception as e:
 """
                 
                 # Write training script to temporary file in backend directory
-                script_path = str(backend_dir / "temp_training_script.py")
+                # Save script to temp directory to avoid triggering server reloads
+                temp_dir = backend_dir / "temp"
+                temp_dir.mkdir(exist_ok=True)
+                script_path = str(temp_dir / "temp_training_script.py")
                 with open(script_path, 'w') as f:
                     f.write(training_script)
                 
@@ -241,14 +247,32 @@ except Exception as e:
                         if not ('epoch' in line.lower() and any(ind in line for ind in epoch_indicators)):
                             continue
                     
-                    # Pattern 1: "Epoch   1/100" or "      1/100" (with leading spaces/tabs)
-                    epoch_match = re.search(r'(?:Epoch\s+|^\s+)(\d+)/(\d+)', line)
+                    # Pattern 1: "Epoch   1/100" (with "Epoch" keyword)
+                    epoch_match = re.search(r'Epoch\s+(\d+)/(\d+)', line, re.IGNORECASE)
                     
-                    # Pattern 2: "1/100:" with colon (YOLO training format)
+                    # Pattern 2: Lines starting with spaces followed by "N/M" (YOLO training format like "    32/100")
+                    # This matches lines like "    32/100         0G      1.379..."
+                    if not epoch_match:
+                        epoch_match = re.search(r'^\s+(\d+)/(\d+)\s+', line)
+                    
+                    # Pattern 3: "N/M:" with colon anywhere in line
                     if not epoch_match:
                         epoch_match = re.search(r'(\d+)/(\d+):', line)
                     
-                    # Pattern 3: Check if it's in a training context
+                    # Pattern 4: Any "N/M" pattern where N and M are reasonable epoch numbers
+                    if not epoch_match:
+                        # Look for patterns like "32/100" where both numbers are reasonable
+                        epoch_match = re.search(r'\b(\d+)/(\d+)\b', line)
+                        if epoch_match:
+                            # Validate it looks like an epoch (not a fraction like "0.5/1.0")
+                            try:
+                                num1, num2 = int(epoch_match.group(1)), int(epoch_match.group(2))
+                                # Skip if it's clearly not an epoch (like "0.5" parsed as "0/5")
+                                if num1 > 1000 or num2 > 1000:
+                                    epoch_match = None
+                            except:
+                                epoch_match = None
+                    
                     if epoch_match:
                         current_epoch = int(epoch_match.group(1))
                         total_epochs = int(epoch_match.group(2))
@@ -262,16 +286,17 @@ except Exception as e:
                             (abs(total_epochs - epochs) <= 10 and total_epochs > 10)  # Close match
                         )
                         
-                        # Skip validation epochs (usually 1/1)
+                        # Skip validation epochs (usually 1/1) and other non-training patterns
                         is_validation = (current_epoch == 1 and total_epochs == 1 and 'class' in line.lower())
+                        is_batch_pattern = ('it/s' in line or 'Size' in line)  # Skip batch progress lines
                         
-                        if is_training_epoch and not is_validation and 0 < current_epoch <= total_epochs:
+                        if is_training_epoch and not is_validation and not is_batch_pattern and 0 < current_epoch <= total_epochs:
                             self.progress_queue.put({
                                 'type': 'epoch',
                                 'current_epoch': current_epoch,
                                 'total_epochs': total_epochs
                             })
-                            print(f"[YOLO] Parsed training epoch: {current_epoch}/{total_epochs}")
+                            print(f"[YOLO] Parsed training epoch: {current_epoch}/{total_epochs} (from line: {line[:80]})")
                     
                     # Also check for download progress
                     if 'downloading' in line.lower() and '%' in line:
@@ -358,23 +383,32 @@ except Exception as e:
                                 if current_info['current_epoch'] > last_epoch_sent:
                                     last_epoch_sent = current_info['current_epoch']
                                     if progress_callback:
+                                        try:
+                                            await progress_callback(
+                                                current_info['current_epoch'],
+                                                current_info['total_epochs'],
+                                                current_info['loss'],
+                                                {}
+                                            )
+                                            print(f"[PROGRESS] Sent epoch update: {current_info['current_epoch']}/{current_info['total_epochs']}, loss={current_info['loss']:.4f}")
+                                        except Exception as e:
+                                            print(f"[PROGRESS] Error calling progress callback: {e}")
+                                            import traceback
+                                            traceback.print_exc()
+                            elif update['type'] == 'loss':
+                                current_info['loss'] = update['loss']
+                                # Send update with new loss value
+                                if progress_callback and current_info['current_epoch'] > 0:
+                                    try:
                                         await progress_callback(
                                             current_info['current_epoch'],
                                             current_info['total_epochs'],
                                             current_info['loss'],
                                             {}
                                         )
-                                        print(f"Sent epoch update: {current_info['current_epoch']}/{current_info['total_epochs']}")
-                            elif update['type'] == 'loss':
-                                current_info['loss'] = update['loss']
-                                # Send update with new loss value
-                                if progress_callback and current_info['current_epoch'] > 0:
-                                    await progress_callback(
-                                        current_info['current_epoch'],
-                                        current_info['total_epochs'],
-                                        current_info['loss'],
-                                        {}
-                                    )
+                                        print(f"[PROGRESS] Sent loss update: epoch={current_info['current_epoch']}, loss={current_info['loss']:.4f}")
+                                    except Exception as e:
+                                        print(f"[PROGRESS] Error calling progress callback for loss: {e}")
                             elif update['type'] == 'init_progress':
                                 # Send initialization progress updates (model download, etc.)
                                 if progress_callback:

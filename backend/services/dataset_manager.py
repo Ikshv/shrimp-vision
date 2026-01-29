@@ -9,10 +9,27 @@ from PIL import Image
 class DatasetManager:
     """
     Manages dataset preparation, splitting, and format conversion
+    Can work with dataset-specific paths or legacy paths
     """
     
-    def __init__(self):
-        self.dataset_dir = "dataset"
+    def __init__(self, dataset_path: Optional[str] = None, upload_dir: Optional[str] = None, annotation_dir: Optional[str] = None):
+        """
+        Initialize DatasetManager with optional dataset-specific paths
+        
+        Args:
+            dataset_path: Path to dataset directory (e.g., "datasets/dataset_xxx/dataset")
+            upload_dir: Path to uploads directory (e.g., "datasets/dataset_xxx/uploads")
+            annotation_dir: Path to annotations directory (e.g., "datasets/dataset_xxx/annotations")
+        """
+        if dataset_path:
+            self.dataset_dir = dataset_path
+        else:
+            # Legacy path
+            self.dataset_dir = "dataset"
+        
+        self.upload_dir = upload_dir or "static/uploads"
+        self.annotation_dir = annotation_dir or "static/annotations"
+        
         self.images_dir = os.path.join(self.dataset_dir, "images")
         self.labels_dir = os.path.join(self.dataset_dir, "labels")
         self.train_images_dir = os.path.join(self.images_dir, "train")
@@ -74,16 +91,15 @@ class DatasetManager:
         """
         annotated_images = []
         
-        # Get all annotation files
-        annotations_dir = "static/annotations"
-        if not os.path.exists(annotations_dir):
+        # Get all annotation files from the configured annotation directory
+        if not os.path.exists(self.annotation_dir):
             return annotated_images
         
-        for annotation_file in os.listdir(annotations_dir):
+        for annotation_file in os.listdir(self.annotation_dir):
             if not annotation_file.endswith('.json'):
                 continue
             
-            annotation_path = os.path.join(annotations_dir, annotation_file)
+            annotation_path = os.path.join(self.annotation_dir, annotation_file)
             image_id = annotation_file.replace('.json', '')
             
             try:
@@ -95,7 +111,7 @@ class DatasetManager:
                 if not image_filename:
                     continue
                 
-                image_path = os.path.join("static/uploads", image_filename)
+                image_path = os.path.join(self.upload_dir, image_filename)
                 if not os.path.exists(image_path):
                     continue
                 

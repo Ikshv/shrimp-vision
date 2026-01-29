@@ -18,7 +18,11 @@ The easiest way to run Shrimp Vision is with Docker:
 ```bash
 git clone <repository-url>
 cd shrimp-vision
+# Run in foreground (see logs)
 docker-compose up --build
+
+# Or run in background (headless/detached mode)
+docker-compose up -d --build
 ```
 
 Access the application at:

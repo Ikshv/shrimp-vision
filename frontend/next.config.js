@@ -44,6 +44,18 @@ const nextConfig = {
         source: '/static/:path*',
         destination: `${backendUrl}/static/:path*`,
       },
+      {
+        source: '/datasets/:path*',
+        destination: `${backendUrl}/static/datasets/:path*`,
+      },
+      {
+        source: '/static/temp/:path*',
+        destination: `${backendUrl}/static/temp/:path*`,
+      },
+      {
+        source: '/temp/:path*',
+        destination: `${backendUrl}/temp/:path*`,
+      },
     ]
   },
 }

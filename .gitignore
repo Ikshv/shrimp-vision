@@ -157,8 +157,11 @@ backend/models/.gitkeep
 backend/dataset/.gitkeep
 backend/exports/.gitkeep
 
-# Exclude specific model files
+# Exclude specific model files and runtime state
 backend/yolov8x.pt
+backend/yolov8*.pt
+backend/datasets/
+backend/training_status.json
 
 # YOLO cache files
 *.cache

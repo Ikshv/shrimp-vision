@@ -4,6 +4,7 @@ from typing import List, Optional
 import os
 import uuid
 import json
+import time
 from PIL import Image
 import aiofiles
 from services.inference_engine import InferenceEngine
@@ -49,10 +50,39 @@ async def predict_shrimp(
         if not image.content_type or not image.content_type.startswith('image/'):
             raise HTTPException(status_code=400, detail="File must be an image")
         
+        # Create temp directory if it doesn't exist
+        # Use absolute path to backend/temp directory
+        from pathlib import Path
+        backend_dir = Path(__file__).parent.parent
+        temp_dir_path = backend_dir / "temp"
+        temp_dir = str(temp_dir_path)
+        os.makedirs(temp_dir, exist_ok=True)
+        
+        # Clean up old temp files before running inference (older than 5 minutes)
+        try:
+            if temp_dir_path.exists():
+                current_time = time.time()
+                cleaned_count = 0
+                for file in temp_dir_path.iterdir():
+                    if file.is_file():
+                        # Remove files older than 5 minutes
+                        try:
+                            if current_time - file.stat().st_mtime > 300:
+                                file.unlink()
+                                cleaned_count += 1
+                        except Exception as e:
+                            # Ignore errors during cleanup - don't break inference
+                            pass
+                if cleaned_count > 0:
+                    print(f"🧹 Cleaned up {cleaned_count} old temp files before inference")
+        except Exception as e:
+            # Don't fail inference if cleanup has issues
+            print(f"Warning: Could not clean temp files: {e}")
+        
         # Generate unique filename for the uploaded image
         file_extension = os.path.splitext(image.filename)[1] if image.filename else '.jpg'
         temp_filename = f"temp_{uuid.uuid4()}{file_extension}"
-        temp_path = f"static/uploads/{temp_filename}"
+        temp_path = os.path.join(temp_dir, temp_filename)
         
         # Save uploaded image temporarily
         async with aiofiles.open(temp_path, 'wb') as f:
@@ -70,7 +100,6 @@ async def predict_shrimp(
                     raise HTTPException(status_code=404, detail="No trained model found")
             
             # Run inference
-            import time
             start_time = time.time()
             
             # Convert confidence threshold to float
@@ -99,10 +128,13 @@ async def predict_shrimp(
                     label=detection['label']
                 ))
             
-            # Generate annotated image path
+            # Generate annotated image path (if annotated image was created)
             annotated_image_path = None
             if result.get('annotated_image_path'):
-                annotated_image_path = f"/static/uploads/{os.path.basename(result['annotated_image_path'])}"
+                # Annotated images are saved to temp directory, convert to URL path
+                # Use /temp/ path to match the route handler
+                annotated_basename = os.path.basename(result['annotated_image_path'])
+                annotated_image_path = f"/temp/{annotated_basename}"
             
             return InferenceResponse(
                 success=True,
@@ -153,10 +185,33 @@ async def batch_predict(
                     errors.append(f"{image.filename}: Not a valid image file")
                     continue
                 
+                # Create temp directory if it doesn't exist
+                # Use absolute path to backend/temp directory
+                backend_dir = Path(__file__).parent.parent
+                temp_dir_path = backend_dir / "temp"
+                temp_dir = str(temp_dir_path)
+                os.makedirs(temp_dir, exist_ok=True)
+                
+                # Clean up old temp files before running inference (older than 5 minutes)
+                if temp_dir_path.exists():
+                    current_time = time.time()
+                    cleaned_count = 0
+                    for file in temp_dir_path.iterdir():
+                        if file.is_file():
+                            # Remove files older than 5 minutes
+                            if current_time - file.stat().st_mtime > 300:
+                                try:
+                                    file.unlink()
+                                    cleaned_count += 1
+                                except Exception as e:
+                                    print(f"Error cleaning up temp file {file.name}: {e}")
+                    if cleaned_count > 0:
+                        print(f"🧹 Cleaned up {cleaned_count} old temp files before batch inference")
+                
                 # Generate unique filename
                 file_extension = os.path.splitext(image.filename)[1] if image.filename else '.jpg'
                 temp_filename = f"temp_{uuid.uuid4()}{file_extension}"
-                temp_path = f"static/uploads/{temp_filename}"
+                temp_path = os.path.join(temp_dir, temp_filename)
                 
                 # Save uploaded image temporarily
                 async with aiofiles.open(temp_path, 'wb') as f:

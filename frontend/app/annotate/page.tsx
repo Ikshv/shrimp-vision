@@ -6,6 +6,7 @@ import Link from 'next/link'
 import toast from 'react-hot-toast'
 import axios from 'axios'
 import { getImageUrl } from '@/lib/config'
+import { useDataset } from '@/contexts/DatasetContext'
 
 interface ImageData {
   id: string
@@ -54,6 +55,7 @@ interface AttributeInfo {
 }
 
 export default function AnnotatePage() {
+  const { activeDataset, refreshDatasets } = useDataset()
   const [images, setImages] = useState<ImageData[]>([])
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const [boundingBoxes, setBoundingBoxes] = useState<BoundingBox[]>([])
@@ -75,7 +77,7 @@ export default function AnnotatePage() {
   useEffect(() => {
     fetchImages()
     fetchAvailableClasses()
-  }, [])
+  }, [activeDataset])
 
   useEffect(() => {
     if (images.length > 0) {
@@ -101,8 +103,14 @@ export default function AnnotatePage() {
   }, [boundingBoxes, currentBox, availableClasses])
 
   const fetchImages = async () => {
+    if (!activeDataset) {
+      setImages([])
+      setIsLoading(false)
+      return
+    }
+
     try {
-      const response = await axios.get('/api/upload/list')
+      const response = await axios.get(`/api/upload/list?dataset_id=${activeDataset.id}`)
       if (response.data.success) {
         setImages(response.data.images)
         setIsLoading(false)
@@ -138,11 +146,11 @@ export default function AnnotatePage() {
   }
 
   const loadCurrentImageAnnotation = async () => {
-    if (images.length === 0) return
+    if (images.length === 0 || !activeDataset) return
     
     const currentImage = images[currentImageIndex]
     try {
-      const response = await axios.get(`/api/annotate/${currentImage.id}`)
+      const response = await axios.get(`/api/annotate/${currentImage.id}?dataset_id=${activeDataset.id}`)
       if (response.data.success && response.data.annotation) {
         setBoundingBoxes(response.data.annotation.bounding_boxes || [])
       } else {
@@ -284,7 +292,7 @@ export default function AnnotatePage() {
   }
 
   const saveAnnotation = async () => {
-    if (images.length === 0) return
+    if (images.length === 0 || !activeDataset) return
     
     const currentImage = images[currentImageIndex]
     setIsSaving(true)
@@ -299,9 +307,11 @@ export default function AnnotatePage() {
         total_shrimp: boundingBoxes.length
       }
       
-      const response = await axios.post('/api/annotate/save', annotation)
+      const response = await axios.post(`/api/annotate/save?dataset_id=${activeDataset.id}`, annotation)
       if (response.data.success) {
         toast.success(`Saved ${boundingBoxes.length} shrimp annotations`)
+        // Refresh dataset stats to update annotation count
+        await refreshDatasets()
       }
     } catch (error) {
       console.error('Error saving annotation:', error)

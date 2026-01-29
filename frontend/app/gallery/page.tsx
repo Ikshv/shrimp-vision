@@ -6,6 +6,8 @@ import Link from 'next/link'
 import toast from 'react-hot-toast'
 import axios from 'axios'
 import { getImageUrl } from '@/lib/config'
+import { useDataset } from '@/contexts/DatasetContext'
+import DatasetSelector from '@/components/DatasetSelector'
 
 interface ImageData {
   id: string
@@ -17,6 +19,7 @@ interface ImageData {
 }
 
 export default function GalleryPage() {
+  const { activeDataset, refreshDatasets } = useDataset()
   const [images, setImages] = useState<ImageData[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedImages, setSelectedImages] = useState<Set<string>>(new Set())
@@ -24,12 +27,18 @@ export default function GalleryPage() {
 
   useEffect(() => {
     fetchImages()
-  }, [])
+  }, [activeDataset])
 
   const fetchImages = async () => {
+    if (!activeDataset) {
+      setImages([])
+      setLoading(false)
+      return
+    }
+
     try {
       setLoading(true)
-      const response = await axios.get('/api/upload/list')
+      const response = await axios.get(`/api/upload/list?dataset_id=${activeDataset.id}`)
       if (response.data.success) {
         setImages(response.data.images)
       }
@@ -42,8 +51,10 @@ export default function GalleryPage() {
   }
 
   const deleteImage = async (imageId: string) => {
+    if (!activeDataset) return
+
     try {
-      await axios.delete(`/api/upload/${imageId}`)
+      await axios.delete(`/api/upload/${imageId}?dataset_id=${activeDataset.id}`)
       setImages(images.filter(img => img.id !== imageId))
       setSelectedImages(prev => {
         const newSet = new Set(prev)
@@ -51,6 +62,8 @@ export default function GalleryPage() {
         return newSet
       })
       toast.success('Image deleted successfully')
+      // Refresh dataset stats to update image count
+      await refreshDatasets()
     } catch (error) {
       console.error('Error deleting image:', error)
       toast.error('Failed to delete image')
@@ -58,17 +71,19 @@ export default function GalleryPage() {
   }
 
   const deleteSelectedImages = async () => {
-    if (selectedImages.size === 0) return
+    if (selectedImages.size === 0 || !activeDataset) return
 
     try {
       const deletePromises = Array.from(selectedImages).map(id => 
-        axios.delete(`/api/upload/${id}`)
+        axios.delete(`/api/upload/${id}?dataset_id=${activeDataset.id}`)
       )
       await Promise.all(deletePromises)
       
       setImages(images.filter(img => !selectedImages.has(img.id)))
       setSelectedImages(new Set())
       toast.success(`${selectedImages.size} images deleted successfully`)
+      // Refresh dataset stats to update image count
+      await refreshDatasets()
     } catch (error) {
       console.error('Error deleting images:', error)
       toast.error('Failed to delete selected images')
@@ -144,6 +159,21 @@ export default function GalleryPage() {
           </div>
         </div>
       </div>
+
+      {/* Dataset Selector */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        <DatasetSelector />
+      </div>
+
+      {!activeDataset && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="card bg-yellow-50 border-yellow-200">
+            <p className="text-yellow-800">
+              ⚠️ Please create or select a dataset to view images.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Controls */}
       {images.length > 0 && (

@@ -2,6 +2,7 @@ import os
 import cv2
 import numpy as np
 from typing import List, Dict, Any, Optional
+from pathlib import Path
 from ultralytics import YOLO
 from PIL import Image
 import json
@@ -232,11 +233,19 @@ class InferenceEngine:
                 2
             )
             
-            # Save annotated image
+            # Save annotated image to temp directory (not in uploads)
+            # Use absolute path to backend/temp directory
+            backend_dir = Path(__file__).parent.parent
+            temp_dir = str(backend_dir / "temp")
+            os.makedirs(temp_dir, exist_ok=True)
+            
             original_filename = os.path.basename(original_path)
             name, ext = os.path.splitext(original_filename)
+            # Remove temp_ prefix if present
+            if name.startswith('temp_'):
+                name = name[5:]  # Remove 'temp_' prefix
             annotated_filename = f"{name}_annotated{ext}"
-            annotated_path = os.path.join("static/uploads", annotated_filename)
+            annotated_path = os.path.join(temp_dir, annotated_filename)
             
             cv2.imwrite(annotated_path, annotated_image)
             

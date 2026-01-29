@@ -74,10 +74,14 @@ if [ package.json -nt node_modules/.package-lock.json ] || [ ! -d node_modules ]
     npm install
 fi
 
-# Create .env.local if it doesn't exist
+# Create .env.local if it doesn't exist or update if port is wrong
 if [ ! -f .env.local ]; then
     echo "📝 Creating environment file..."
-    echo "NEXT_PUBLIC_API_URL=http://localhost:8000" > .env.local
+    echo "NEXT_PUBLIC_API_URL=http://localhost:3100" > .env.local
+elif ! grep -q "NEXT_PUBLIC_API_URL=http://localhost:3100" .env.local; then
+    echo "📝 Updating environment file with correct port..."
+    sed -i.bak "s|NEXT_PUBLIC_API_URL=.*|NEXT_PUBLIC_API_URL=http://localhost:3100|" .env.local
+    rm -f .env.local.bak
 fi
 
 # Start frontend in background
@@ -87,9 +91,9 @@ FRONTEND_PID=$!
 echo ""
 echo "🎉 Shrimp Vision is starting up!"
 echo "========================================"
-echo "🌐 Frontend: http://localhost:3000"
-echo "🔧 Backend API: http://localhost:8000"
-echo "📚 API Docs: http://localhost:8000/docs"
+echo "🌐 Frontend: http://localhost:3099"
+echo "🔧 Backend API: http://localhost:3100"
+echo "📚 API Docs: http://localhost:3100/docs"
 echo ""
 echo "Press Ctrl+C to stop both servers"
 echo ""

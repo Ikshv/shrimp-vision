@@ -9,6 +9,7 @@ import TrainingProgress from '@/components/TrainingProgress'
 
 interface TrainingConfig {
   model_type: string
+  model_name?: string
   epochs: number
   batch_size: number
   image_size: number
@@ -40,6 +41,7 @@ interface ModelInfo {
 export default function TrainPage() {
   const [config, setConfig] = useState<TrainingConfig>({
     model_type: 'yolov8n',
+    model_name: 'shrimp',
     epochs: 100,
     batch_size: 16,
     image_size: 640,
@@ -156,8 +158,11 @@ export default function TrainPage() {
           setIsTraining(false)
         }
       }
-    } catch (error) {
-      console.error('Error fetching training status:', error)
+    } catch (error: any) {
+      // Ignore timeout and connection errors - they're expected during heavy training
+      if (error.code !== 'ECONNABORTED' && error.code !== 'ECONNRESET' && error.message !== 'socket hang up') {
+        console.error('Error fetching training status:', error)
+      }
     }
   }
 
@@ -297,6 +302,23 @@ export default function TrainPage() {
               </div>
               
               <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Model Name
+                  </label>
+                  <input
+                    type="text"
+                    value={config.model_name || 'shrimp'}
+                    onChange={(e) => setConfig(prev => ({ ...prev, model_name: e.target.value || 'shrimp' }))}
+                    className="input-field"
+                    placeholder="e.g., shrimp-red, shrimp-blue"
+                    disabled={isTraining}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Custom name for the model. Will be saved as: {config.model_name || 'shrimp'}_{config.model_type}.pt
+                  </p>
+                </div>
+                
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Model Type
