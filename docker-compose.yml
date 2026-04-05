@@ -11,6 +11,7 @@ services:
       - ./backend/static:/app/static
       - ./backend/models:/app/models
       - ./backend/dataset:/app/dataset
+      - ./backend/datasets:/app/datasets
       - ./backend/exports:/app/exports
     environment:
       - PYTHONUNBUFFERED=1

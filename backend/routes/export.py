@@ -67,6 +67,10 @@ async def export_dataset(
                         file_path = os.path.join(annotation_dir, filename)
                         zipf.write(file_path, f"annotations/{filename}")
             
+            manifest_file = os.path.join(dataset["path"], "dataset_manifest.yaml")
+            if os.path.isfile(manifest_file):
+                zipf.write(manifest_file, "dataset_manifest.yaml")
+            
             # Add dataset structure if requested
             if config.include_dataset and dataset_path and os.path.exists(dataset_path):
                 for root, dirs, files in os.walk(dataset_path):

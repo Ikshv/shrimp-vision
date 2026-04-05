@@ -2,7 +2,8 @@
 
 import { useState } from 'react'
 import { useDataset } from '@/contexts/DatasetContext'
-import { Database, Plus, Check, X, Loader2 } from 'lucide-react'
+import Link from 'next/link'
+import { Database, Plus, Check, X, Loader2, Tags } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 export default function DatasetSelector() {
@@ -79,13 +80,23 @@ export default function DatasetSelector() {
           <Database className="w-5 h-5" />
           Datasets
         </h2>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="btn-primary flex items-center gap-2"
-        >
-          <Plus className="w-4 h-4" />
-          New Dataset
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/classes"
+            className="btn-secondary flex items-center gap-2"
+            title="Edit detection classes, optional color tags, and extra attributes for this dataset"
+          >
+            <Tags className="w-4 h-4" />
+            Labels &amp; attributes
+          </Link>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="btn-primary flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            New Dataset
+          </button>
+        </div>
       </div>
 
       {datasets.length === 0 ? (

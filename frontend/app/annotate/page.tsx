@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
-import { ArrowLeft, ArrowRight, Save, Target, RotateCcw, X } from 'lucide-react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { ArrowLeft, ArrowRight, Save, Target, RotateCcw, X, Tags } from 'lucide-react'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 import axios from 'axios'
@@ -55,7 +55,11 @@ interface AttributeInfo {
 }
 
 export default function AnnotatePage() {
-  const { activeDataset, refreshDatasets } = useDataset()
+  const {
+    activeDataset,
+    refreshDatasets,
+    isLoading: datasetsLoading,
+  } = useDataset()
   const [images, setImages] = useState<ImageData[]>([])
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const [boundingBoxes, setBoundingBoxes] = useState<BoundingBox[]>([])
@@ -64,7 +68,7 @@ export default function AnnotatePage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [availableClasses, setAvailableClasses] = useState<Record<string, ClassInfo>>({})
-  const [selectedClass, setSelectedClass] = useState<string>('shrimp')
+  const [selectedClass, setSelectedClass] = useState<string>('')
   const [colorAttributes, setColorAttributes] = useState<Record<string, AttributeInfo>>({})
   const [additionalAttributes, setAdditionalAttributes] = useState<Record<string, AttributeInfo>>({})
   const [selectedColor, setSelectedColor] = useState<string | null>(null)
@@ -74,10 +78,50 @@ export default function AnnotatePage() {
   const imageRef = useRef<HTMLImageElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    fetchImages()
-    fetchAvailableClasses()
+  const loadPageData = useCallback(async () => {
+    if (!activeDataset) {
+      setImages([])
+      setAvailableClasses({})
+      setColorAttributes({})
+      setAdditionalAttributes({})
+      setIsLoading(false)
+      return
+    }
+    setIsLoading(true)
+    try {
+      const [imgRes, clsRes] = await Promise.all([
+        axios.get(`/api/upload/list?dataset_id=${activeDataset.id}`),
+        axios.get(`/api/annotate/classes?dataset_id=${encodeURIComponent(activeDataset.id)}`),
+      ])
+      if (imgRes.data.success) {
+        setImages(imgRes.data.images)
+      }
+      if (clsRes.data.success) {
+        setAvailableClasses(clsRes.data.types || clsRes.data.classes)
+        setColorAttributes(clsRes.data.colors || {})
+        setAdditionalAttributes(clsRes.data.attributes || {})
+      }
+    } catch (error) {
+      console.error('Error loading annotate page:', error)
+      toast.error('Failed to load images or detection classes')
+      setImages([])
+      setAvailableClasses({})
+    } finally {
+      setIsLoading(false)
+    }
   }, [activeDataset])
+
+  useEffect(() => {
+    loadPageData()
+  }, [loadPageData])
+
+  useEffect(() => {
+    const keys = Object.keys(availableClasses)
+    if (keys.length === 0) return
+    if (!selectedClass || !(selectedClass in availableClasses)) {
+      setSelectedClass(keys[0])
+    }
+  }, [availableClasses, selectedClass])
 
   useEffect(() => {
     if (images.length > 0) {
@@ -101,49 +145,6 @@ export default function AnnotatePage() {
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
   }, [boundingBoxes, currentBox, availableClasses])
-
-  const fetchImages = async () => {
-    if (!activeDataset) {
-      setImages([])
-      setIsLoading(false)
-      return
-    }
-
-    try {
-      const response = await axios.get(`/api/upload/list?dataset_id=${activeDataset.id}`)
-      if (response.data.success) {
-        setImages(response.data.images)
-        setIsLoading(false)
-      }
-    } catch (error) {
-      console.error('Error fetching images:', error)
-      toast.error('Failed to load images')
-      setIsLoading(false)
-    }
-  }
-
-  const fetchAvailableClasses = async () => {
-    try {
-      const response = await axios.get('/api/annotate/classes')
-      if (response.data.success) {
-        setAvailableClasses(response.data.types || response.data.classes)
-        setColorAttributes(response.data.colors || {})
-        setAdditionalAttributes(response.data.attributes || {})
-      }
-    } catch (error) {
-      console.error('Error fetching classes:', error)
-      // Fallback to default shrimp class
-      setAvailableClasses({
-        'shrimp': {
-          id: 0,
-          name: 'shrimp',
-          display_name: 'Shrimp',
-          color: '#10B981',
-          description: 'Regular shrimp'
-        }
-      })
-    }
-  }
 
   const loadCurrentImageAnnotation = async () => {
     if (images.length === 0 || !activeDataset) return
@@ -183,7 +184,7 @@ export default function AnnotatePage() {
       y: normalizedY,
       width: 0,
       height: 0,
-      label: 'shrimp',
+      label: selectedClass || Object.keys(availableClasses)[0] || '',
       confidence: 1.0
     })
   }
@@ -259,7 +260,9 @@ export default function AnnotatePage() {
       const height = box.height! * canvas.height
       
       // Get class color
-      const classInfo = availableClasses[box.label || 'shrimp']
+      const classInfo =
+        availableClasses[box.label || ''] ||
+        availableClasses[Object.keys(availableClasses)[0] || '']
       const color = classInfo?.color || '#10B981'
       
       // Draw rectangle with class-specific color
@@ -309,7 +312,7 @@ export default function AnnotatePage() {
       
       const response = await axios.post(`/api/annotate/save?dataset_id=${activeDataset.id}`, annotation)
       if (response.data.success) {
-        toast.success(`Saved ${boundingBoxes.length} shrimp annotations`)
+        toast.success(`Saved ${boundingBoxes.length} annotation(s)`)
         // Refresh dataset stats to update annotation count
         await refreshDatasets()
       }
@@ -336,6 +339,34 @@ export default function AnnotatePage() {
   const resetAnnotation = () => {
     setBoundingBoxes([])
     drawCanvas()
+  }
+
+  if (datasetsLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading datasets...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!activeDataset) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="card max-w-md text-center py-12 w-full">
+          <Target className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No active dataset</h3>
+          <p className="text-gray-600 mb-6">
+            Open the home page, create or activate a dataset, then return here.
+          </p>
+          <Link href="/" className="btn-primary">
+            Home
+          </Link>
+        </div>
+      </div>
+    )
   }
 
   if (isLoading) {
@@ -368,6 +399,25 @@ export default function AnnotatePage() {
     )
   }
 
+  if (Object.keys(availableClasses).length === 0) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+          <div className="card text-center py-12 max-w-lg mx-auto">
+            <Target className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No detection classes</h3>
+            <p className="text-gray-600 mb-6">
+              Configure at least one class for this dataset before annotating.
+            </p>
+            <Link href="/classes" className="btn-primary">
+              Edit labels &amp; attributes
+            </Link>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   const currentImage = images[currentImageIndex]
 
   return (
@@ -375,14 +425,27 @@ export default function AnnotatePage() {
       {/* Header */}
       <div className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">Annotate Shrimp</h1>
+              <h1 className="text-3xl font-bold text-gray-900">Annotate</h1>
               <p className="text-gray-600 mt-1">
-                Draw bounding boxes around shrimp in the images
+                Draw bounding boxes for each detection class in the images. Optional color and extra
+                tags come from your dataset — edit them on{' '}
+                <Link href="/classes" className="text-primary-600 font-medium underline hover:no-underline">
+                  Labels &amp; attributes
+                </Link>
+                .
               </p>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Link
+                href="/classes"
+                className="btn-secondary flex items-center gap-2 text-sm"
+                title="Change detection classes, color tags, and extra attributes"
+              >
+                <Tags className="w-4 h-4" />
+                Labels &amp; attributes
+              </Link>
               <button
                 onClick={resetAnnotation}
                 className="btn-secondary flex items-center gap-2"
@@ -624,7 +687,7 @@ export default function AnnotatePage() {
                   <h4 className="font-medium text-gray-900">Instructions:</h4>
                   <ul className="text-sm text-gray-600 space-y-1">
                     <li>• Click and drag to draw boxes</li>
-                    <li>• Label each shrimp individually</li>
+                    <li>• Label each object with the correct class</li>
                     <li>• Save annotations regularly</li>
                     <li>• Use Previous/Next to navigate</li>
                   </ul>
@@ -635,7 +698,9 @@ export default function AnnotatePage() {
                     <h4 className="font-medium text-gray-900 mb-2">Bounding Boxes:</h4>
                     <div className="space-y-2 max-h-40 overflow-y-auto">
                       {boundingBoxes.map((box, index) => {
-                        const classInfo = availableClasses[box.label || 'shrimp']
+                        const classInfo =
+        availableClasses[box.label || ''] ||
+        availableClasses[Object.keys(availableClasses)[0] || '']
                         const colorInfo = box.color ? colorAttributes[box.color] : null
                         return (
                           <div
@@ -695,9 +760,13 @@ export default function AnnotatePage() {
         </div>
 
         {/* Navigation */}
-        <div className="flex justify-between items-center mt-8">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between mt-8">
           <Link href="/upload" className="btn-secondary">
             ← Back to Upload
+          </Link>
+          <Link href="/classes" className="btn-secondary inline-flex items-center justify-center gap-2">
+            <Tags className="w-4 h-4" />
+            Labels &amp; attributes
           </Link>
           <Link href="/train" className="btn-primary">
             Train Model →

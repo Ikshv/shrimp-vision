@@ -47,9 +47,10 @@ Access the application at:
 ## Data Persistence
 
 The following directories are mounted as volumes to persist data:
-- `backend/static/` - Uploaded images and annotations
+- `backend/static/` - Legacy uploads/annotations (if used)
 - `backend/models/` - Trained model files
-- `backend/dataset/` - Training datasets
+- `backend/dataset/` - Legacy single-folder training layout
+- `backend/datasets/` - Multi-dataset storage (images, annotations, `dataset_manifest.yaml`, prepared YOLO data)
 - `backend/exports/` - Exported datasets
 
 ## Development vs Production

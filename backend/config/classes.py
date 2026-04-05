@@ -133,7 +133,17 @@ ADDITIONAL_ATTRIBUTES = {
         "name": "female",
         "display_name": "Female",
         "description": "Female shrimp"
-    }
+    },
+    "shiny": {
+        "name": "shiny",
+        "display_name": "Shiny",
+        "description": "Reflective / shiny appearance"
+    },
+    "not_shiny": {
+        "name": "not_shiny",
+        "display_name": "Not shiny",
+        "description": "Matte or non-reflective appearance"
+    },
 }
 
 # Backward compatibility: combine into AVAILABLE_CLASSES

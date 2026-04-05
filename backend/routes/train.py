@@ -249,8 +249,11 @@ async def get_training_status():
                 }
             }
     except json.JSONDecodeError as e:
-        # If JSON is corrupted, return idle status
         print(f"Error parsing training status JSON: {e}")
+        try:
+            await aiofiles.os.remove(str(TRAINING_STATUS_FILE))
+        except OSError:
+            pass
         return {
             "success": True,
             "status": {
@@ -356,7 +359,8 @@ async def run_training(config: TrainingConfig, dataset_id: Optional[str] = None)
         dataset_manager = DatasetManager(
             dataset_path=dataset_path,
             upload_dir=upload_dir,
-            annotation_dir=annotation_dir
+            annotation_dir=annotation_dir,
+            dataset_root=dataset["path"],
         )
         dataset_yaml_path = await dataset_manager.prepare_dataset(
             train_split=config.train_split,

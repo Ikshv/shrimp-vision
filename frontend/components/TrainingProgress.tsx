@@ -28,95 +28,123 @@ export default function TrainingProgress({ isVisible, onClose }: TrainingProgres
 
   useEffect(() => {
     if (!isVisible) {
-      // Reset refs when modal closes
       prevStatusRef.current = undefined
       prevEpochRef.current = undefined
       return
     }
-    
-    // Use polling for reliable updates
-    const pollTrainingStatus = async () => {
+
+    let cancelled = false
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+
+    const scheduleNext = (delayMs: number) => {
+      if (cancelled) return
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId)
+        timeoutId = null
+      }
+      timeoutId = setTimeout(() => {
+        timeoutId = null
+        void runPoll()
+      }, delayMs)
+    }
+
+    const runPoll = async () => {
+      if (cancelled) return
+
       try {
-        // Add timeout to prevent hanging requests
         const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 2000) // 2 second timeout
-        
+        const watchdog = setTimeout(() => controller.abort(), 8000)
+
         const response = await fetch('/api/train/status', {
           signal: controller.signal,
-          cache: 'no-cache', // Always fetch fresh data
-          headers: {
-            'Cache-Control': 'no-cache'
-          }
+          cache: 'no-cache',
+          headers: { 'Cache-Control': 'no-cache', Accept: 'application/json' },
         })
-        
-        clearTimeout(timeoutId)
-        
+
+        clearTimeout(watchdog)
+
+        const raw = await response.text()
         if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`)
+          throw new Error(`HTTP ${response.status}: ${raw.slice(0, 200)}`)
         }
-        
-        const data = await response.json()
-        
+
+        let data: { success?: boolean; status?: TrainingUpdate }
+        try {
+          data = JSON.parse(raw)
+        } catch {
+          console.error('Training status: non-JSON response', raw.slice(0, 120))
+          throw new Error('Invalid JSON from /api/train/status')
+        }
+
         if (data.success && data.status) {
-          const status = data.status
-          
-          // Update last known good status
+          const status = data.status as TrainingUpdate
+
           lastKnownStatusRef.current = status
           setTrainingData(status)
-          
-          // Add to logs - only add new entries when status changes or epoch changes
-          const shouldLog = 
-            prevStatusRef.current !== status.status || 
+
+          const shouldLog =
+            prevStatusRef.current !== status.status ||
             prevEpochRef.current !== status.current_epoch ||
             (status.status === 'preparing' && prevStatusRef.current !== 'preparing') ||
             (status.status === 'training' && prevEpochRef.current === undefined)
-          
+
           if (shouldLog) {
             let logMessage = `[${new Date().toLocaleTimeString()}] ${status.message}`
-            
-            // Add more detail for training epochs
+
             if (status.status === 'training' && status.current_epoch > 0) {
               logMessage += ` - Epoch ${status.current_epoch}/${status.total_epochs}`
               if (status.loss !== null && status.loss !== undefined) {
                 logMessage += ` - Loss: ${status.loss.toFixed(4)}`
               }
             }
-            
-            setLogs(prev => {
-              // Don't duplicate the same log message
+
+            setLogs((prev) => {
               if (prev.length > 0 && prev[prev.length - 1] === logMessage) {
                 return prev
               }
-              const newLogs = [...prev, logMessage]
-              return newLogs.slice(-50) // Keep last 50 logs for more history
+              return [...prev, logMessage].slice(-50)
             })
-            
+
             prevStatusRef.current = status.status
             prevEpochRef.current = status.current_epoch
           }
+
+          // Stop hammering the API once training is done (or idle with modal still open)
+          const terminal =
+            status.status === 'completed' ||
+            status.status === 'failed' ||
+            status.status === 'idle'
+          if (terminal) {
+            return
+          }
         }
-      } catch (error: any) {
-        // On error, keep showing the last known good status instead of resetting
-        // This prevents the UI from showing "idle" when requests fail during training
+      } catch (error: unknown) {
+        const err = error as { name?: string; message?: string }
         if (lastKnownStatusRef.current) {
           setTrainingData(lastKnownStatusRef.current)
         }
-        
-        // Only log non-timeout errors
-        if (error.name !== 'AbortError' && error.code !== 'ECONNRESET' && error.message !== 'socket hang up') {
+        if (
+          err.name !== 'AbortError' &&
+          err.message !== 'socket hang up' &&
+          !String(err.message).includes('ECONNRESET')
+        ) {
           console.error('Error polling training status:', error)
         }
       }
+
+      if (!cancelled) {
+        scheduleNext(1000)
+      }
     }
-    
-    // Poll every 1 second for fast updates during training
-    const interval = setInterval(pollTrainingStatus, 1000)
-    
-    // Initial poll immediately
-    pollTrainingStatus()
-    
+
+    void runPoll()
+
     return () => {
-      clearInterval(interval)
+      cancelled = true
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId)
+        timeoutId = null
+      }
     }
   }, [isVisible])
 

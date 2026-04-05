@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Brain, Play, Square, Download, Settings, BarChart3 } from 'lucide-react'
+import { Brain, Play, Square, Download, Settings, BarChart3, Tags } from 'lucide-react'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 import axios from 'axios'
@@ -279,14 +279,26 @@ export default function TrainPage() {
       {/* Header */}
       <div className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h1 className="text-3xl font-bold text-gray-900">Train Model</h1>
-              <p className="text-gray-600 mt-1">Train YOLOv8 models for shrimp detection</p>
+              <p className="text-gray-600 mt-1">
+                Class list and YOLO label order come from{' '}
+                <Link href="/classes" className="text-primary-600 font-medium underline hover:no-underline">
+                  Labels &amp; attributes
+                </Link>
+                .
+              </p>
             </div>
-            <Link href="/test" className="btn-primary">
-              Test Model
-            </Link>
+            <div className="flex flex-wrap items-center gap-2">
+              <Link href="/classes" className="btn-secondary flex items-center gap-2 text-sm">
+                <Tags className="w-4 h-4" />
+                Labels &amp; attributes
+              </Link>
+              <Link href="/test" className="btn-primary">
+                Test Model
+              </Link>
+            </div>
           </div>
         </div>
       </div>
@@ -429,15 +441,21 @@ export default function TrainPage() {
                     </div>
                   </div>
                   
-                  <div className="flex gap-2">
-                    {trainingStatus.status === 'idle' && (
+                  <div className="flex flex-wrap gap-2">
+                    {(trainingStatus.status === 'idle' ||
+                      trainingStatus.status === 'failed' ||
+                      trainingStatus.status === 'completed') && (
                       <button
                         onClick={startTraining}
                         disabled={annotationStats.annotated_images < 5}
                         className="btn-primary flex items-center gap-2"
                       >
                         <Play className="w-4 h-4" />
-                        Start Training
+                        {trainingStatus.status === 'failed'
+                          ? 'Retry training'
+                          : trainingStatus.status === 'completed'
+                            ? 'Train again'
+                            : 'Start Training'}
                       </button>
                     )}
                     
@@ -452,10 +470,10 @@ export default function TrainPage() {
                     )}
                     
                     {trainingStatus.status === 'completed' && trainingStatus.model_path && (
-                      <button className="btn-primary flex items-center gap-2">
+                      <Link href="/test" className="btn-secondary flex items-center gap-2">
                         <Download className="w-4 h-4" />
-                        Download Model
-                      </button>
+                        Test / export model
+                      </Link>
                     )}
                   </div>
                 </div>

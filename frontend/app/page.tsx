@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Upload, Target, Brain, Download, Camera, Zap, Grid3X3 } from 'lucide-react'
+import { Upload, Target, Brain, Download, Camera, Zap, Grid3X3, Tags } from 'lucide-react'
 import Link from 'next/link'
 
 export default function Home() {
@@ -21,9 +21,15 @@ export default function Home() {
       href: "/gallery"
     },
     {
+      icon: <Tags className="w-8 h-8 text-orange-600" />,
+      title: "Labels & tags",
+      description: "Detection classes, optional color tags, and extra attributes per dataset",
+      href: "/classes"
+    },
+    {
       icon: <Target className="w-8 h-8 text-shrimp-600" />,
-      title: "Annotate Shrimp",
-      description: "Use our intuitive bounding box tool to label shrimp",
+      title: "Annotate",
+      description: "Draw bounding boxes with your dataset's detection classes",
       href: "/annotate"
     },
     {
@@ -87,7 +93,7 @@ export default function Home() {
             </p>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {features.map((feature, index) => (
               <Link
                 key={index}
@@ -168,6 +174,9 @@ export default function Home() {
               </Link>
               <Link href="/gallery" className="text-gray-400 hover:text-white transition-colors">
                 Gallery
+              </Link>
+              <Link href="/classes" className="text-gray-400 hover:text-white transition-colors">
+                Classes
               </Link>
               <Link href="/annotate" className="text-gray-400 hover:text-white transition-colors">
                 Annotate

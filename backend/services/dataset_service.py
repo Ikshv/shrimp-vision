@@ -150,6 +150,11 @@ class DatasetService:
             metadata["active_dataset_id"] = dataset_id
         
         self._save_metadata(metadata)
+        try:
+            from services.dataset_manifest import load_manifest
+            load_manifest(dataset_path)
+        except Exception as e:
+            print(f"Warning: could not seed dataset_manifest.yaml: {e}")
         return dataset_info
     
     def list_datasets(self) -> List[Dict]:

@@ -52,6 +52,7 @@ lerna-debug.log*
 .next/
 out/
 build/
+*.tsbuildinfo
 
 # Environment variables and secrets
 .env

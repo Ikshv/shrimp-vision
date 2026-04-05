@@ -1,5 +1,5 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException, Form
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional
 import os
 import uuid
@@ -8,6 +8,7 @@ import time
 from PIL import Image
 import aiofiles
 from services.inference_engine import InferenceEngine
+from services.dataset_manifest import parse_composite_yolo_slug
 
 # Create a global inference engine instance to maintain state between requests
 inference_engine = None
@@ -27,6 +28,9 @@ class DetectionResult(BaseModel):
     height: float
     confidence: float
     label: str
+    base_label: Optional[str] = None
+    color: Optional[str] = None
+    attributes: List[str] = Field(default_factory=list)
 
 class InferenceResponse(BaseModel):
     success: bool
@@ -113,19 +117,29 @@ async def predict_shrimp(
                 model_name=model_name,
                 confidence_threshold=confidence_threshold_float
             )
+
+            if result.get("success") is False:
+                raise HTTPException(
+                    status_code=500,
+                    detail=result.get("error") or "Inference failed",
+                )
             
             processing_time = time.time() - start_time
             
             # Convert detections to response format
             detections = []
             for detection in result.get('detections', []):
+                parsed = parse_composite_yolo_slug(detection["label"])
                 detections.append(DetectionResult(
                     x=detection['x'],
                     y=detection['y'],
                     width=detection['width'],
                     height=detection['height'],
                     confidence=detection['confidence'],
-                    label=detection['label']
+                    label=detection['label'],
+                    base_label=parsed.get("base_label"),
+                    color=parsed.get("color"),
+                    attributes=list(parsed.get("attributes") or []),
                 ))
             
             # Generate annotated image path (if annotated image was created)
@@ -234,13 +248,17 @@ async def batch_predict(
                     # Convert detections to response format
                     detections = []
                     for detection in result.get('detections', []):
+                        parsed = parse_composite_yolo_slug(detection["label"])
                         detections.append({
                             "x": detection['x'],
                             "y": detection['y'],
                             "width": detection['width'],
                             "height": detection['height'],
                             "confidence": detection['confidence'],
-                            "label": detection['label']
+                            "label": detection['label'],
+                            "base_label": parsed.get("base_label"),
+                            "color": parsed.get("color"),
+                            "attributes": list(parsed.get("attributes") or []),
                         })
                     
                     results.append({

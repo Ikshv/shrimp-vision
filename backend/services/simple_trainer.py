@@ -107,6 +107,9 @@ image_size = {image_size}
 learning_rate = {learning_rate}
 models_dir = r"{abs_models_dir}"
 device = "{self.device}"
+# CPU / low-memory Docker: avoid OOM from DataLoader workers and RAM image cache
+train_workers = 0 if device == "cpu" else 4
+train_cache = False if device == "cpu" else "ram"
 
 print(f"Models directory: {{models_dir}}")
 print(f"Dataset path: {{dataset_path}}")
@@ -132,7 +135,8 @@ try:
         'save_period': 10,
         'patience': 50,
         'verbose': True,
-        'workers': 4 if device == 'cuda' else 2,
+        'workers': train_workers,
+        'cache': train_cache,
         'amp': device == 'cuda',
     }}
     
@@ -348,7 +352,21 @@ except Exception as e:
                 # Check for errors
                 if return_code != 0 and not result_container["result"]:
                     if not result_container["error"]:
-                        result_container["error"] = f"Training process failed with return code {return_code}"
+                        if return_code < 0 and -return_code == 9:
+                            result_container["error"] = (
+                                "Training was killed (SIGKILL / exit -9), usually out-of-memory inside Docker or the host. "
+                                "Try: increase Docker memory (Settings → Resources), or use YOLOv8 Nano, batch size 4–8, "
+                                "image size 416, and fewer epochs to test."
+                            )
+                        elif return_code == 137:
+                            result_container["error"] = (
+                                "Training exited 137 (often OOM killer). Same fixes as above: more RAM for Docker, "
+                                "smaller model, lower batch size."
+                            )
+                        else:
+                            result_container["error"] = (
+                                f"Training process failed with return code {return_code}"
+                            )
                 
             except Exception as e:
                 print(f"Training worker error: {str(e)}")

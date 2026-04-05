@@ -4,8 +4,16 @@ from typing import List, Dict, Any, Optional
 import json
 import os
 from pathlib import Path
-from config.classes import AVAILABLE_CLASSES, is_valid_class, get_class_by_name
 from services.dataset_service import DatasetService
+from services.dataset_manifest import (
+    types_for_annotate,
+    is_valid_label,
+    get_class_by_name_for_dataset,
+    colors_for_annotate,
+    additional_for_annotate,
+    is_valid_color_attr,
+    is_valid_additional_attr,
+)
 
 router = APIRouter()
 dataset_service = DatasetService()
@@ -34,19 +42,40 @@ class AnnotationList(BaseModel):
     annotations: List[Annotation]
 
 @router.get("/classes")
-async def get_available_classes():
+async def get_available_classes(
+    dataset_id: Optional[str] = Query(
+        None,
+        description="Dataset ID; uses active dataset if omitted",
+    ),
+):
     """
-    Get list of available classes and attributes for multi-tagging
+    Detection types, color tags, and additional tags come from the dataset manifest
+    when a dataset is selected; otherwise legacy defaults from config.
     """
-    from config.classes import COLOR_ATTRIBUTES, ADDITIONAL_ATTRIBUTES, SHRIMP_TYPES
-    
+    dataset_root = None
+    ds = None
+    if dataset_id:
+        ds = dataset_service.get_dataset(dataset_id)
+        if not ds:
+            raise HTTPException(status_code=404, detail="Dataset not found")
+        dataset_root = ds["path"]
+    else:
+        ds = dataset_service.get_active_dataset()
+        if ds:
+            dataset_root = ds["path"]
+
+    types = types_for_annotate(dataset_root)
+    colors = colors_for_annotate(dataset_root)
+    attrs = additional_for_annotate(dataset_root)
+
     return {
         "success": True,
-        "types": SHRIMP_TYPES,
-        "colors": COLOR_ATTRIBUTES,
-        "attributes": ADDITIONAL_ATTRIBUTES,
-        "classes": AVAILABLE_CLASSES,  # For backward compatibility
-        "class_names": list(AVAILABLE_CLASSES.keys())
+        "types": types,
+        "colors": colors,
+        "attributes": attrs,
+        "classes": types,
+        "class_names": list(types.keys()),
+        "dataset_id": dataset_id or (ds["id"] if ds else None),
     }
 
 @router.post("/save")
@@ -70,23 +99,35 @@ async def save_annotation(
         
         upload_dir = dataset_service.get_dataset_upload_dir(dataset["id"])
         annotation_dir = dataset_service.get_dataset_annotation_dir(dataset["id"])
-        
+        dataset_root = dataset["path"]
+
         # Validate image exists
         image_path = os.path.join(upload_dir, annotation.image_filename)
         if not os.path.exists(image_path):
             raise HTTPException(status_code=404, detail="Image not found")
-        
+
         # Validate all bounding box classes
         class_counts = {}
         for bbox in annotation.bounding_boxes:
-            if not is_valid_class(bbox.label):
+            if not is_valid_label(dataset_root, bbox.label):
                 raise HTTPException(status_code=400, detail=f"Invalid class: {bbox.label}")
-            
-            # Set class_id if not provided
+
             if bbox.class_id is None:
-                class_info = get_class_by_name(bbox.label)
+                class_info = get_class_by_name_for_dataset(dataset_root, bbox.label)
                 bbox.class_id = class_info["id"] if class_info else 0
-            
+
+            if not is_valid_color_attr(dataset_root, bbox.color):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid color attribute: {bbox.color}",
+                )
+            for attr in bbox.attributes or []:
+                if not is_valid_additional_attr(dataset_root, attr):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Invalid additional attribute: {attr}",
+                    )
+
             # Count classes
             class_counts[bbox.label] = class_counts.get(bbox.label, 0) + 1
         
@@ -143,14 +184,40 @@ async def save_all_annotations(
         saved_count = 0
         errors = []
         
+        dataset_root = dataset["path"]
         for annotation in annotation_list.annotations:
             try:
+                invalid = False
+                for bbox in annotation.bounding_boxes:
+                    if not is_valid_label(dataset_root, bbox.label):
+                        errors.append(
+                            f"Invalid class '{bbox.label}' in {annotation.image_filename}"
+                        )
+                        invalid = True
+                        break
+                    if not is_valid_color_attr(dataset_root, bbox.color):
+                        errors.append(
+                            f"Invalid color '{bbox.color}' in {annotation.image_filename}"
+                        )
+                        invalid = True
+                        break
+                    for attr in bbox.attributes or []:
+                        if not is_valid_additional_attr(dataset_root, attr):
+                            errors.append(
+                                f"Invalid attribute '{attr}' in {annotation.image_filename}"
+                            )
+                            invalid = True
+                            break
+                    if invalid:
+                        break
+                if invalid:
+                    continue
                 # Validate image exists
                 image_path = os.path.join(upload_dir, annotation.image_filename)
                 if not os.path.exists(image_path):
                     errors.append(f"Image not found: {annotation.image_filename}")
                     continue
-                
+
                 # Save annotation as JSON
                 annotation_path = os.path.join(annotation_dir, f"{annotation.image_id}.json")
                 with open(annotation_path, 'w') as f:

@@ -6,27 +6,37 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 from PIL import Image
 
+from services.dataset_manifest import bbox_training_signature, build_yolo_composite_labels
+
 class DatasetManager:
     """
     Manages dataset preparation, splitting, and format conversion
     Can work with dataset-specific paths or legacy paths
     """
     
-    def __init__(self, dataset_path: Optional[str] = None, upload_dir: Optional[str] = None, annotation_dir: Optional[str] = None):
+    def __init__(
+        self,
+        dataset_path: Optional[str] = None,
+        upload_dir: Optional[str] = None,
+        annotation_dir: Optional[str] = None,
+        dataset_root: Optional[str] = None,
+    ):
         """
         Initialize DatasetManager with optional dataset-specific paths
-        
+
         Args:
             dataset_path: Path to dataset directory (e.g., "datasets/dataset_xxx/dataset")
-            upload_dir: Path to uploads directory (e.g., "datasets/dataset_xxx/uploads")
-            annotation_dir: Path to annotations directory (e.g., "datasets/dataset_xxx/annotations")
+            upload_dir: Path to images (e.g., "datasets/dataset_xxx/images")
+            annotation_dir: Path to annotations (e.g., "datasets/dataset_xxx/annotations")
+            dataset_root: Parent directory holding dataset_manifest.yaml (e.g., "datasets/dataset_xxx")
         """
         if dataset_path:
             self.dataset_dir = dataset_path
         else:
             # Legacy path
             self.dataset_dir = "dataset"
-        
+
+        self.dataset_root = dataset_root
         self.upload_dir = upload_dir or "static/uploads"
         self.annotation_dir = annotation_dir or "static/annotations"
         
@@ -40,6 +50,9 @@ class DatasetManager:
         # Create directories
         for dir_path in [self.train_images_dir, self.val_images_dir, self.train_labels_dir, self.val_labels_dir]:
             os.makedirs(dir_path, exist_ok=True)
+
+        self._composite_slugs: Optional[List[str]] = None
+        self._signature_to_idx: Optional[Dict[Any, int]] = None
     
     async def prepare_dataset(self, train_split: float = 0.8, val_split: float = 0.2) -> Optional[str]:
         """
@@ -55,6 +68,10 @@ class DatasetManager:
             if not annotated_images:
                 print("No annotated images found")
                 return None
+
+            self._composite_slugs, self._signature_to_idx = build_yolo_composite_labels(
+                annotated_images, self.dataset_root
+            )
             
             # Shuffle the list for random splitting
             random.shuffle(annotated_images)
@@ -177,9 +194,12 @@ class DatasetManager:
             width = bbox['width']
             height = bbox['height']
             
-            # YOLO format: class_id x_center y_center width height (all normalized)
-            # Use class_id from bbox, fallback to 0 for backward compatibility
-            class_id = bbox.get('class_id', 0)
+            # YOLO class: composite index (type + optional color + optional attribute tags)
+            if self._signature_to_idx is not None:
+                sig = bbox_training_signature(bbox)
+                class_id = self._signature_to_idx[sig]
+            else:
+                class_id = bbox.get('class_id', 0)
             yolo_line = f"{class_id} {x_center:.6f} {y_center:.6f} {width:.6f} {height:.6f}"
             yolo_annotations.append(yolo_line)
         
@@ -189,13 +209,17 @@ class DatasetManager:
         """
         Create dataset.yaml file for YOLO training with multi-class support
         """
-        from config.classes import get_class_names, get_num_classes
-        
-        class_names = get_class_names()
-        num_classes = get_num_classes()
+        from services.dataset_manifest import yolo_names_from_manifest, yolo_num_classes
+
+        if self._composite_slugs:
+            class_names = self._composite_slugs
+            num_classes = len(class_names)
+        else:
+            class_names = yolo_names_from_manifest(self.dataset_root)
+            num_classes = yolo_num_classes(self.dataset_root)
         
         dataset_yaml_content = f"""
-# Shrimp Detection Dataset Configuration
+# YOLO dataset — names[i] is class index i. Slugs may combine type + color (c_) + tags (a_, ::-separated).
 path: {os.path.abspath(self.dataset_dir)}
 train: images/train
 val: images/val
@@ -216,6 +240,8 @@ names: {class_names}  # class names
         Clear existing dataset files
         """
         try:
+            self._composite_slugs = None
+            self._signature_to_idx = None
             # Remove existing files in dataset directories
             for dir_path in [self.train_images_dir, self.val_images_dir, self.train_labels_dir, self.val_labels_dir]:
                 if os.path.exists(dir_path):

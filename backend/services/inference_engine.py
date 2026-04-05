@@ -16,6 +16,29 @@ class InferenceEngine:
         self.models_dir = "models"
         self.current_model = None
         self.current_model_path = None
+
+    @staticmethod
+    def _class_label_from_yolo_names(names: Any, class_id: int) -> Optional[str]:
+        """Map YOLO class index to label; handles dict (int/str keys), list, and tuple."""
+        if names is None:
+            return None
+        if isinstance(names, (list, tuple)):
+            if 0 <= class_id < len(names):
+                return str(names[class_id])
+            return None
+        if isinstance(names, dict):
+            if class_id in names:
+                return str(names[class_id])
+            sk = str(class_id)
+            if sk in names:
+                return str(names[sk])
+            try:
+                fi = float(class_id)
+                if fi == int(fi) and int(fi) in names:
+                    return str(names[int(fi)])
+            except (TypeError, ValueError):
+                pass
+        return None
     
     async def predict(
         self,
@@ -72,17 +95,14 @@ class InferenceEngine:
                         width_norm = (x2 - x1) / img_width
                         height_norm = (y2 - y1) / img_height
                         
-                        # Get class name - prefer model's own class names, fallback to our mapping
-                        if model_class_names and class_id in model_class_names:
-                            # Use the model's class name directly (most reliable)
-                            label = model_class_names[class_id]
+                        label = self._class_label_from_yolo_names(model_class_names, class_id)
+                        if label:
                             print(f"[INFERENCE] Model predicts class_id {class_id} = '{label}' (confidence: {confidence:.3f})")
                         else:
-                            # Fallback to our class mapping
                             from config.classes import get_class_by_id
                             class_info = get_class_by_id(class_id)
-                            label = class_info["name"] if class_info else f"unknown_class_{class_id}"
-                            print(f"[INFERENCE] Using fallback mapping: class_id {class_id} = '{label}' (confidence: {confidence:.3f})")
+                            label = class_info["name"] if class_info else f"class_{class_id}"
+                            print(f"[INFERENCE] Fallback label for class_id {class_id} = '{label}' (confidence: {confidence:.3f})")
                         
                         # Track detected classes for debugging
                         if label not in detected_classes:
@@ -136,23 +156,16 @@ class InferenceEngine:
         Get the path to the model file
         """
         if model_name:
-            # Use specific model
-            model_path = os.path.join(self.models_dir, model_name)
+            # Use specific model (basename only; avoid path traversal)
+            safe_name = os.path.basename(model_name)
+            model_path = os.path.join(self.models_dir, safe_name)
             if os.path.exists(model_path):
                 return model_path
         
-        # Find the best trained model (prefer YOLOv8m for better performance)
+        # Newest .pt by mtime — matches SimpleTrainer output (e.g. shrimp_yolov8n.pt)
         if os.path.exists(self.models_dir):
             model_files = [f for f in os.listdir(self.models_dir) if f.endswith('.pt')]
             if model_files:
-                # Prefer YOLOv8m model for better performance
-                preferred_models = ['shrimp_detection_yolov8m_best.pt', 'shrimp_detection_yolov8s_best.pt', 'shrimp_detection_yolov8l_best.pt', 'shrimp_detection_yolov8n_best.pt']
-                
-                for preferred in preferred_models:
-                    if preferred in model_files:
-                        return os.path.join(self.models_dir, preferred)
-                
-                # Fallback to newest model if no preferred model found
                 model_files.sort(key=lambda x: os.path.getmtime(os.path.join(self.models_dir, x)), reverse=True)
                 return os.path.join(self.models_dir, model_files[0])
         
@@ -172,7 +185,17 @@ class InferenceEngine:
             annotated_image = image.copy()
             
             # Get class colors for visualization
-            from config.classes import get_class_by_name, AVAILABLE_CLASSES
+            from config.classes import get_class_by_name
+
+            def _color_for_label(name: str) -> tuple:
+                info = get_class_by_name(name)
+                if info and info.get("color"):
+                    return info["color"]
+                h = abs(hash(name)) % (256 * 256 * 256)
+                r, g, b = (h >> 16) & 255, (h >> 8) & 255, h & 255
+                if r + g + b < 80:
+                    r, g, b = 200, 200, 100
+                return f"#{r:02x}{g:02x}{b:02x}"
             
             # Draw bounding boxes
             for detection in detections:
@@ -181,10 +204,8 @@ class InferenceEngine:
                 width = int(detection["width"] * image.shape[1])
                 height = int(detection["height"] * image.shape[0])
                 
-                # Get color for this class
-                label = detection.get('label', 'shrimp')
-                class_info = get_class_by_name(label) or AVAILABLE_CLASSES.get('shrimp', {})
-                color_hex = class_info.get('color', '#10B981')
+                label = detection.get('label', 'object')
+                color_hex = _color_for_label(label)
                 # Convert hex color (#RRGGBB) to BGR for OpenCV
                 # Remove '#' if present and convert to RGB integers
                 hex_clean = color_hex.lstrip('#')
@@ -222,7 +243,7 @@ class InferenceEngine:
                 )
             
             # Add total count
-            count_text = f"Total Shrimp: {len(detections)}"
+            count_text = f"Detections: {len(detections)}"
             cv2.putText(
                 annotated_image,
                 count_text,

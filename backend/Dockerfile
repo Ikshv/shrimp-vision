@@ -27,7 +27,7 @@ COPY . .
 RUN mkdir -p static/uploads static/annotations models \
     dataset/images/train dataset/images/val \
     dataset/labels/train dataset/labels/val \
-    exports
+    datasets exports
 
 # Expose port
 EXPOSE 3100

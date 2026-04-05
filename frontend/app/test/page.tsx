@@ -14,6 +14,9 @@ interface DetectionResult {
   height: number
   confidence: number
   label: string
+  base_label?: string | null
+  color?: string | null
+  attributes?: string[]
 }
 
 interface InferenceResponse {
@@ -108,7 +111,10 @@ export default function TestPage() {
 
       if (response.data.success) {
         setInferenceResult(response.data)
-        toast.success(`Detected ${response.data.total_shrimp} shrimp`)
+        const n = response.data.total_shrimp
+        toast.success(
+          n === 1 ? '1 detection' : `${n} detections`
+        )
       } else {
         toast.error('Inference failed')
       }
@@ -425,19 +431,49 @@ export default function TestPage() {
                         Detection Details
                       </h3>
                       <div className="space-y-2 max-h-40 overflow-y-auto">
-                        {inferenceResult.detections.map((detection, index) => (
-                          <div
-                            key={index}
-                            className="flex items-center justify-between p-2 bg-gray-50 rounded text-sm"
-                          >
-                            <span>
-                              {detection.label} #{index + 1}
-                            </span>
-                            <span className="text-gray-600">
-                              {(detection.confidence * 100).toFixed(1)}%
-                            </span>
-                          </div>
-                        ))}
+                        {inferenceResult.detections.map((detection, index) => {
+                          const tags = detection.attributes?.length
+                            ? detection.attributes
+                            : []
+                          const colorTag = detection.color
+                          const typeName =
+                            detection.base_label || detection.label.split('__')[0] || detection.label
+                          return (
+                            <div
+                              key={index}
+                              className="p-2 bg-gray-50 rounded text-sm space-y-1"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="font-medium text-gray-900">
+                                  {typeName} #{index + 1}
+                                </span>
+                                <span className="text-gray-600 shrink-0">
+                                  {(detection.confidence * 100).toFixed(1)}%
+                                </span>
+                              </div>
+                              {(colorTag || tags.length > 0) && (
+                                <div className="text-xs text-gray-600 pl-0">
+                                  {colorTag && (
+                                    <span className="mr-2">
+                                      Color: <span className="text-gray-800">{colorTag}</span>
+                                    </span>
+                                  )}
+                                  {tags.length > 0 && (
+                                    <span>
+                                      Tags:{' '}
+                                      <span className="text-gray-800">{tags.join(', ')}</span>
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                              {detection.label.includes('__') && (
+                                <div className="text-xs text-gray-400 font-mono truncate" title={detection.label}>
+                                  {detection.label}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
                       </div>
                     </div>
                   )}
